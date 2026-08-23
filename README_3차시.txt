@@ -10,7 +10,14 @@
 - 연결 ID는 config.py의 SPREADSHEET_ID에 입력되어 있습니다.
 - 배포 환경에는 기존과 동일한 GOOGLE_SERVICE_ACCOUNT 값을 설정해야 합니다.
 
-3. 학생 질문용 물품과 루카의 응답
+3. OpenAI 생성형 AI
+- 모델: gpt-4o-mini
+- 배포 환경에 OPENAI_API_KEY를 설정해야 합니다.
+- 정해진 상태 흐름은 백엔드가 관리합니다.
+- GPT는 기분 표현, 예상 밖 응답의 의미 이해, 짧은 재진술과 힌트에 사용됩니다.
+- GPT 오류가 발생해도 기본 규칙 응답으로 대화가 계속됩니다.
+
+4. 학생 질문용 물품과 루카의 응답
 - pencil: No
 - ruler: Yes
 - eraser: No
@@ -23,12 +30,16 @@
 물품별 응답은 data/characters.json의 inventory에서 바꿀 수 있습니다.
 음성인식 별칭은 data/items.json에서 추가할 수 있습니다.
 
-4. 화면 자료
-현재 한국 학교 배경 이미지가 없어 임시 교실색 배경을 사용합니다.
-한국 학교 배경 파일을 준비한 뒤 data/characters.json의 backgrounds에
-파일명을 추가하면 슬라이드 배경으로 사용할 수 있습니다.
+5. 화면 자료
+- 학교 배경 파일은 ZIP에 포함되어 있지 않습니다.
+- GitHub 프로젝트 최상위 폴더에 다음 두 원본 GIF를 별도로 올려야 합니다.
+  school background 1.gif
+  school background 2.gif
+- data/characters.json에는 위 파일명이 이미 연결되어 있습니다.
+- 두 배경은 8초 간격으로 전환되며 16초 주기로 반복됩니다.
+- 파일명은 띄어쓰기, 숫자, 소문자 확장자까지 정확히 같아야 합니다.
 
-5. 배포
+6. 배포
 - Build Command: pip install -r requirements.txt
 - Start Command: gunicorn app:app
-- 환경변수: GOOGLE_SERVICE_ACCOUNT, FLASK_SECRET_KEY
+- 환경변수: GOOGLE_SERVICE_ACCOUNT, OPENAI_API_KEY, FLASK_SECRET_KEY

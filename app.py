@@ -8,6 +8,7 @@ import gspread
 from flask import Flask, jsonify, render_template, request, session
 from flask_cors import CORS
 from google.oauth2.service_account import Credentials
+from openai import OpenAI
 
 from config import (
     CHATBOT_ID,
@@ -16,8 +17,12 @@ from config import (
     GOOGLE_SERVICE_ACCOUNT_ENV,
     LESSON_TYPE,
     MAX_HISTORY_MESSAGES,
+    MAX_RESPONSE_TOKENS,
+    MODEL_NAME,
+    OPENAI_API_KEY_ENV,
     SPREADSHEET_ID,
     Stage,
+    TEMPERATURE,
 )
 from data_loader import CHARACTERS
 from dialogue_manager import get_item_answer, make_item_response
@@ -33,6 +38,9 @@ CHARACTER_NAME = CHARACTER["name"]
 COUNTRY = CHARACTER["country"]
 SHEET_TAB = CHARACTER.get("sheet_tab", CHATBOT_ID)
 ENDING_MESSAGE = CHARACTER["ending_message"]
+
+openai_key = os.environ.get(OPENAI_API_KEY_ENV)
+openai_client = OpenAI(api_key=openai_key) if openai_key else None
 
 
 sheet = None
@@ -104,6 +112,62 @@ def feeling_reply(message):
     if any(word in text for word in ["tired", "sleepy", "sad", "not good"]):
         return "I see."
     return "Okay!"
+
+
+def call_gpt(system_prompt, user_message, fallback):
+    """제한된 생성형 피드백. 실패하면 수업 흐름을 지키는 기본 응답을 사용한다."""
+    if not openai_client:
+        return fallback
+    try:
+        result = openai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=TEMPERATURE,
+            max_tokens=MAX_RESPONSE_TOKENS,
+        )
+        reply = (result.choices[0].message.content or "").strip()
+        return reply or fallback
+    except Exception as error:
+        print(f"❌ OpenAI 호출 실패: {error}")
+        return fallback
+
+
+def ai_feeling_reply(message):
+    fallback = feeling_reply(message)
+    prompt = f"""
+You are {CHARACTER_NAME}, a friendly 10-year-old child from {COUNTRY}.
+A Korean grade-3 beginner has answered "How are you today?"
+Respond to the feeling in exactly one very short A1 English sentence.
+Use no more than 5 words. Do not ask a question. Do not correct grammar.
+Do not use emojis, explanations, Korean, or quotation marks.
+""".strip()
+    return call_gpt(prompt, message, fallback)
+
+
+def ai_classify_yes_no(message):
+    prompt = """
+Classify a Korean grade-3 beginner's answer to a Do you have...? question.
+Return exactly one lowercase word: yes, no, or unknown.
+Accept short, imperfect, or mixed Korean-English answers.
+""".strip()
+    result = call_gpt(prompt, message, "unknown").lower().strip(" .!?\"'")
+    return result if result in {"yes", "no"} else None
+
+
+def ai_scaffold_reply(message, example):
+    fallback = f'Good try! Say, "{example}"'
+    prompt = f"""
+You are {CHARACTER_NAME}, a friendly AI partner for Korean grade-3 English beginners.
+The learner is doing a short controlled speaking task about "Do you have...?"
+The learner said: {message}
+Give supportive corrective feedback in one or two very short A1 sentences.
+End by giving this exact model expression: {example}
+Do not explain grammar. Do not use Korean or emojis.
+""".strip()
+    return call_gpt(prompt, message, fallback)
 
 
 def save_log(corrected, original, reply, stage):
@@ -227,7 +291,7 @@ def chat():
 
     if stage == Stage.WAIT_FEELING.value:
         reply = (
-            f"{feeling_reply(original)} Let's study together! "
+            f"{ai_feeling_reply(original)} Let's study together! "
             "Oh, no! I don't have a pencil. Do you have a pencil?"
         )
         return respond(
@@ -240,8 +304,10 @@ def chat():
     if stage == Stage.WAIT_BOT_QUESTION_ANSWER.value:
         answer = parse_yes_no(original)
         if answer is None:
+            answer = ai_classify_yes_no(original)
+        if answer is None:
             return respond(
-                'Please say, "Yes, I do" or "No, I don\'t."',
+                ai_scaffold_reply(original, "Yes, I do. / No, I don't."),
                 '"Yes, I do." 또는 "No, I don\'t."로 대답해 보세요.',
                 stage,
                 original=original,
@@ -273,7 +339,7 @@ def chat():
         item = find_item(original)
         if not item:
             return respond(
-                'Please ask, "Do you have a ruler?"',
+                ai_scaffold_reply(original, "Do you have a ruler?"),
                 "활동지의 물품을 보고 질문해 보세요.",
                 stage,
                 original=original,
@@ -281,7 +347,7 @@ def chat():
         if not is_have_question(original):
             example = f"Do you have {item['display_name']}?"
             return respond(
-                f'Good try! Please ask, "{example}"',
+                ai_scaffold_reply(original, example),
                 f'"{example}"라고 다시 말해 보세요.',
                 stage,
                 original=original,
