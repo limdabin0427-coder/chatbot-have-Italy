@@ -1,0 +1,34 @@
+{
+  "pencil": {
+    "display_name": "a pencil",
+    "aliases": ["pencil", "a pencil", "pens all", "pencel"]
+  },
+  "ruler": {
+    "display_name": "a ruler",
+    "aliases": ["ruler", "a ruler", "rule her", "roller"]
+  },
+  "eraser": {
+    "display_name": "an eraser",
+    "aliases": ["eraser", "an eraser", "a razor", "erasor"]
+  },
+  "pencil_case": {
+    "display_name": "a pencil case",
+    "aliases": ["pencil case", "a pencil case", "pencilcase"]
+  },
+  "book": {
+    "display_name": "a book",
+    "aliases": ["book", "a book"]
+  },
+  "notebook": {
+    "display_name": "a notebook",
+    "aliases": ["notebook", "a notebook", "note book"]
+  },
+  "school_bag": {
+    "display_name": "a school bag",
+    "aliases": ["school bag", "a school bag", "schoolbag"]
+  },
+  "soccer_ball": {
+    "display_name": "a soccer ball",
+    "aliases": ["soccer ball", "a soccer ball", "football"]
+  }
+}
