@@ -24,8 +24,8 @@
     "aliases": ["notebook", "a notebook", "note book"]
   },
   "bag": {
-    "display_name": "bag",
-    "aliases": ["bag", "a school bag", "schoolbag"]
+    "display_name": "a bag",
+    "aliases": ["bag", "a bag", "a school bag", "schoolbag"]
   },
   "soccer_ball": {
     "display_name": "a soccer ball",
@@ -36,7 +36,7 @@
     "aliases": ["pen", "a pen"]
   },
   "tape": {
-    "display_name": "a tape",
+    "display_name": "tape",
     "aliases": ["tape", "a tape"]
   },
   "brush": {
@@ -51,3 +51,4 @@
     "display_name": "a hat",
     "aliases": ["hat", "a hat"]
   }
+}
