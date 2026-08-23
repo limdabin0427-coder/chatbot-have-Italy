@@ -23,12 +23,31 @@
     "display_name": "a notebook",
     "aliases": ["notebook", "a notebook", "note book"]
   },
-  "school_bag": {
-    "display_name": "a school bag",
-    "aliases": ["school bag", "a school bag", "schoolbag"]
+  "bag": {
+    "display_name": "bag",
+    "aliases": ["bag", "a school bag", "schoolbag"]
   },
   "soccer_ball": {
     "display_name": "a soccer ball",
     "aliases": ["soccer ball", "a soccer ball", "football"]
+  },
+  "pen": {
+    "display_name": "a pen",
+    "aliases": ["pen", "a pen"]
+  },
+  "tape": {
+    "display_name": "a tape",
+    "aliases": ["tape", "a tape"]
+  },
+  "brush": {
+    "display_name": "a brush",
+    "aliases": ["brush", "a brush"]
+  },
+  "ball": {
+    "display_name": "a ball",
+    "aliases": ["ball", "a ball"]
+  },
+  "hat": {
+    "display_name": "a hat",
+    "aliases": ["hat", "a hat"]
   }
-}
