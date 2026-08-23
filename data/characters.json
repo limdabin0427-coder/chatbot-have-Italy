@@ -1,0 +1,46 @@
+{
+  "Italy": {
+    "name": "Luca",
+    "country": "Italy",
+    "age": 10,
+    "gender": "male",
+    "emoji": "🇮🇹",
+    "sheet_tab": "Italy",
+    "landing_title": "Hello, Korea!",
+    "intro_message": "Nice to meet you. I'm Luca. I'm from Italy. I'm visiting your school today.",
+    "intro_speech": "Hi! Nice to meet you. I'm Luca. I'm from Italy. I'm visiting your school today.",
+    "ending_message": "Great job! Thank you for helping me. Come visit Italy next time! See you!",
+    "finale_message": "Come visit Italy next time!\n다음에는 이탈리아에서 만나요!",
+    "first_item": "pencil",
+    "inventory": {
+      "pencil": "no",
+      "ruler": "yes",
+      "eraser": "no",
+      "pencil_case": "yes",
+      "book": "yes",
+      "notebook": "no",
+      "school_bag": "yes",
+      "soccer_ball": "no"
+    },
+    "images": {
+      "flag": "italy flag.gif",
+      "backgrounds": [
+        "school background 1.gif",
+        "school background 2.gif",
+        "school background 3.gif"
+      ],
+      "character": {
+        "greeting": "greeting.gif",
+        "speaking": "speaking.gif",
+        "yes": "yes.gif",
+        "no": "no.gif"
+      }
+    },
+    "tts": {
+      "gender": "male",
+      "child_mode": true,
+      "rate": 0.85,
+      "pitch": 1.35
+    }
+  }
+}
