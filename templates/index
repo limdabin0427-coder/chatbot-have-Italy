@@ -56,10 +56,7 @@
             position: absolute; inset: 0;
             background-size: cover; background-position: center;
             opacity: 0;
-            animation: bgFade 16s infinite ease-in-out;
-        }
-        @keyframes bgFade {
-            0%{opacity:0} 8%{opacity:1} 50%{opacity:1} 58%{opacity:0} 100%{opacity:0}
+            transition: opacity 1s ease-in-out;
         }
 
         /* ════════════════════════════════════
@@ -370,6 +367,8 @@ const flagEl    = document.getElementById('flag');
 
 let voices = [], studentNumber = '', studentName = '', stage = 'WAIT_GREETING';
 let conversationHistory = [], popupTimer = null;
+let backgroundTimer = null, backgroundIndex = 0;
+const backgroundDurations = [8000, 8000, 6000];
 
 /* ── CONFIG 초기화: config.py의 CHATBOT_ID → /api/config → 화면 ── */
 let configReady = false;
@@ -381,9 +380,10 @@ function applyConfig() {
         const d = document.createElement('div');
         d.className = 'bg-slide';
         d.style.backgroundImage = `url('${src}')`;
-        d.style.animationDelay  = `${i * 8}s`;
+        d.style.opacity = i === 0 ? '1' : '0';
         bg.appendChild(d);
     });
+    startBackgroundRotation();
     flagEl.src = CONFIG.flagImg;
     flagEl.alt = `${CONFIG.country} flag`;
     charImg.src = CONFIG.gif.greeting;
@@ -391,6 +391,27 @@ function applyConfig() {
     document.getElementById('finale-msg').innerText = CONFIG.finaleMsg;
     document.getElementById('landing-title').innerText = `🇰🇷 ${CONFIG.landingTitle}`;
     document.title = `${CONFIG.characterName} - ${CONFIG.country}`;
+}
+
+function startBackgroundRotation() {
+    clearTimeout(backgroundTimer);
+    const slides = Array.from(document.querySelectorAll('.bg-slide'));
+    if (slides.length < 2) return;
+    backgroundIndex = 0;
+
+    const showNextBackground = () => {
+        const waitTime = backgroundDurations[backgroundIndex]
+            || backgroundDurations[backgroundDurations.length - 1]
+            || 8000;
+        backgroundTimer = setTimeout(() => {
+            slides[backgroundIndex].style.opacity = '0';
+            backgroundIndex = (backgroundIndex + 1) % slides.length;
+            slides[backgroundIndex].style.opacity = '1';
+            showNextBackground();
+        }, waitTime);
+    };
+
+    showNextBackground();
 }
 
 async function loadChatbotConfig() {
