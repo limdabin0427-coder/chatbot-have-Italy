@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hello, Korea!</title>
+
+    <script>
+    const CONFIG = {
+        characterName : "Luca",
+        country       : "Italy",
+        gif: {
+            greeting : "greeting.gif",
+            speaking : "speaking.gif",
+            yes      : "yes.gif",
+            no       : "no.gif",
+        },
+        backgrounds: [],
+        flagImg    : "italy flag.gif",
+        tts: { gender: "male", childMode: true, rate: 0.85 },
+        landingTitle: "Hello, Korea!",
+        finaleMsg  : "Come visit Italy next time!\n다음에는 이탈리아에서 만나요!",
+    };
+    </script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* ════════════════════════════════════
+           전체 앱: 100vh, flex column
+        ════════════════════════════════════ */
+        #app {
+            width: 100vw;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── 배경 (전체 화면 고정) ── */
+        #bg {
+            position: fixed; inset: 0;
+            z-index: 0; pointer-events: none;
+            background:
+                linear-gradient(rgba(255,255,255,0.15), rgba(255,255,255,0.15)),
+                linear-gradient(160deg, #b8e4ff 0%, #fff4ca 55%, #b7e3c0 100%);
+        }
+        .bg-slide {
+            position: absolute; inset: 0;
+            background-size: cover; background-position: center;
+            opacity: 0;
+            animation: bgFade 16s infinite ease-in-out;
+        }
+        @keyframes bgFade {
+            0%{opacity:0} 8%{opacity:1} 50%{opacity:1} 58%{opacity:0} 100%{opacity:0}
+        }
+
+        /* ════════════════════════════════════
+           상단 50% — 캐릭터 존
+        ════════════════════════════════════ */
+        #top {
+            position: relative;
+            flex: 0 0 50%;        /* ← 정확히 50% */
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* 말풍선은 위쪽, 캐릭터는 아래쪽에 붙게 */
+            justify-content: space-between;
+            padding: 14px 14px 0;
+            overflow: hidden;     /* 캐릭터가 밖으로 나가지 않게 */
+        }
+
+        /* 국기 */
+        #flag {
+            position: absolute;
+            top: 14px; left: 14px;
+            width: clamp(34px, 8vw, 50px); height: auto;
+            border-radius: 4px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+            z-index: 20;
+        }
+
+        /* 말풍선 */
+        #bubble {
+            position: relative;
+            z-index: 8;
+            background: rgba(255,255,255,0.97);
+            border-radius: 20px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+            padding: 12px 20px;
+            width: min(70vw, 300px);
+            text-align: center;
+            font-size: clamp(13px, 3.6vw, 18px);
+            font-weight: 700;
+            color: #1a1a2e;
+            line-height: 1.5;
+            word-break: keep-all;
+            display: none;        /* startApp()에서 보임 */
+            /* 말풍선 꼬리 */
+            margin-bottom: 0;
+        }
+        #bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -10px; left: 50%;
+            transform: translateX(-50%);
+            border: 10px solid transparent;
+            border-top-color: rgba(255,255,255,0.97);
+            border-bottom: 0;
+        }
+
+        /* 캐릭터 GIF ─ 상단 50% 안에서 남은 공간을 채움 */
+        #char {
+            position: relative;
+            z-index: 10;
+            flex: 1 1 0;          /* 말풍선 제외 남은 높이 전부 */
+            width: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            overflow: hidden;
+        }
+        #char img {
+            height: 100%;         /* 상단 50% 내 남은 높이를 꽉 채움 */
+            width: auto;
+            max-width: 100%;
+            object-fit: contain;
+            object-position: bottom center;
+            mix-blend-mode: screen; /* 검정 배경 투명화 */
+        }
+
+        /* ════════════════════════════════════
+           하단 50% — 글래스모피즘 대화 존
+        ════════════════════════════════════ */
+        #bottom {
+            position: relative;
+            flex: 0 0 50%;        /* ← 정확히 50% */
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255,255,255,0.22);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            border-top: 1px solid rgba(255,255,255,0.4);
+            overflow: hidden;
+        }
+
+        /* 채팅 스크롤 영역 */
+        #chat {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px 14px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.3) transparent;
+        }
+        #chat::-webkit-scrollbar { width: 3px; }
+        #chat::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.35);
+            border-radius: 3px;
+        }
+
+        /* 메시지 행 */
+        .row { display: flex; align-items: flex-start; gap: 6px; }
+        .row.luca-row { align-self: flex-start; max-width: 88%; }
+        .row.user-row { align-self: flex-end; max-width: 88%; }
+
+        .msg-flag {
+            width: clamp(18px, 4.5vw, 24px); height: auto;
+            border-radius: 3px; flex-shrink: 0; margin-top: 2px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        .msg {
+            padding: 8px 12px; border-radius: 14px;
+            font-size: clamp(12px, 3.3vw, 15px);
+            font-weight: 600; line-height: 1.45; word-break: break-word;
+        }
+        .msg.luca {
+            background: rgba(255,255,255,0.92); color: #1d1d1f;
+            border-top-left-radius: 3px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+        }
+        .msg.user {
+            background: rgba(0,176,155,0.85); color: #fff;
+            border-top-right-radius: 3px;
+        }
+
+        /* ── 하단 컨트롤 (힌트 + 마이크) ── */
+        #controls {
+            flex: 0 0 auto;         /* 절대 축소 안 됨 */
+            padding: 8px 16px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 노란 힌트 캡슐 */
+        #popup {
+            width: 100%;
+            background: #FFE44D;
+            color: #4a3500;
+            padding: 10px 18px;
+            border-radius: 50px;
+            font-size: clamp(12px, 3.2vw, 14px);
+            font-weight: 700;
+            text-align: center;
+            line-height: 1.4;
+            box-shadow: 0 3px 10px rgba(200,160,0,0.25);
+            white-space: pre-wrap;
+            /* 숨김 애니메이션 */
+            max-height: 0; overflow: hidden;
+            opacity: 0; padding-top: 0; padding-bottom: 0;
+            transition: max-height 0.32s ease, opacity 0.28s ease, padding 0.28s ease;
+        }
+        #popup.show {
+            max-height: 80px; opacity: 1;
+            padding: 10px 18px;
+        }
+
+        /* 서브 안내 */
+        #hint {
+            color: rgba(30,30,30,0.85);
+            font-size: clamp(11px, 2.9vw, 13px);
+            font-weight: 700;
+            text-align: center;
+        }
+
+        /* 마이크 버튼 — 항상 보임, startApp 전엔 비활성 스타일 */
+        #mic {
+            width: clamp(56px, 13vw, 66px);
+            height: clamp(56px, 13vw, 66px);
+            border-radius: 50%; border: none;
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            color: #fff;
+            font-size: clamp(22px, 5.5vw, 26px);
+            cursor: pointer;
+            box-shadow: 0 5px 18px rgba(255,65,108,0.48);
+            transition: transform 0.15s, box-shadow 0.15s;
+            /* ✅ 처음부터 보이게, 단 비활성 상태 */
+            display: block;
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        /* startApp 후 활성화 */
+        #mic.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #mic.active:active { transform: scale(0.93); }
+        #mic.recording {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            box-shadow: 0 0 28px rgba(56,239,125,0.75);
+            animation: pulse 1.4s infinite;
+        }
+        @keyframes pulse {
+            0%{transform:scale(1)} 50%{transform:scale(1.09)} 100%{transform:scale(1)}
+        }
+
+        /* ── 피날레 ── */
+        #finale { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.80); z-index:9998; justify-content:center; align-items:center; }
+        #finale.show { display:flex; }
+        #finale-msg {
+            background: linear-gradient(135deg,#fff9e6,#fff);
+            color:#2a2a2a; padding:28px 24px; border-radius:22px;
+            font-size:clamp(16px,4.5vw,20px); font-weight:800;
+            text-align:center; line-height:1.75;
+            box-shadow:0 12px 40px rgba(0,0,0,0.4);
+            max-width:min(310px,90vw); border:3px solid #FFD700;
+            white-space:pre-wrap;
+        }
+        .spark { position:fixed; border-radius:50%; pointer-events:none; z-index:9997; animation:sparkFly 1.3s ease-out forwards; }
+        @keyframes sparkFly { 0%{transform:translate(0,0) scale(1);opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(0.1);opacity:0} }
+
+        /* ── 로그인 ── */
+        #login { position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:9999; display:flex; justify-content:center; align-items:center; }
+        #login-box {
+            background:#fff; padding:30px 24px; border-radius:20px;
+            text-align:center; max-width:320px; width:90%;
+            box-shadow:0 8px 32px rgba(0,0,0,0.35);
+        }
+        .lt { font-size:clamp(19px,5vw,24px); font-weight:800; color:#1a1a2e; margin-bottom:6px; }
+        .ls { font-size:clamp(13px,3.3vw,14px); font-weight:600; color:#555; margin-bottom:2px; }
+        .lk { font-size:clamp(11px,2.8vw,13px); color:#999; margin-bottom:16px; }
+        .login-input {
+            width:100%; padding:11px 14px; border:1.5px solid #ddd; border-radius:9px;
+            font-size:16px; text-align:center; margin-bottom:12px; outline:none;
+            transition:border-color 0.2s;
+        }
+        .login-input:focus { border-color:#00b09b; }
+        #login-btn {
+            width:100%; padding:12px; border:none; border-radius:9px;
+            background:linear-gradient(135deg,#00b09b,#96c93d);
+            color:#fff; font-size:clamp(14px,3.8vw,16px); font-weight:800; cursor:pointer;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login">
+    <div id="login-box">
+        <div class="lt" id="landing-title">🇰🇷 Hello, Korea!</div>
+        <div class="ls">Enter your number and name.</div>
+        <div class="lk">번호와 이름을 입력하세요</div>
+        <input type="text" inputmode="numeric" class="login-input" id="number-input" placeholder="번호 (예: 01)">
+        <input type="text" class="login-input" id="name-input" placeholder="이름 (예: 홍길동)">
+        <button id="login-btn">Let's Go! 🚀</button>
+    </div>
+</div>
+
+<!-- 피날레 -->
+<div id="finale"><div id="finale-msg"></div></div>
+
+<!-- 메인 -->
+<div id="app">
+    <div id="bg"></div>
+
+    <!-- 상단 50% -->
+    <div id="top">
+        <img id="flag" alt="flag">
+
+        <!-- 말풍선 -->
+        <div id="bubble"></div>
+
+        <!-- 캐릭터 -->
+        <div id="char">
+            <img id="char-img" alt="character">
+        </div>
+    </div>
+
+    <!-- 하단 50% -->
+    <div id="bottom">
+        <div id="chat"></div>
+
+        <div id="controls">
+            <div id="popup"></div>
+            <div id="hint">잠시만 기다려주세요...</div>
+            <button id="mic">🎙️</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── DOM 참조 ── */
+const bubble    = document.getElementById('bubble');
+const popup     = document.getElementById('popup');
+const chat      = document.getElementById('chat');
+const hint      = document.getElementById('hint');
+const mic       = document.getElementById('mic');
+let recognition = null;
+let isBotSpeaking = false;
+const finale    = document.getElementById('finale');
+const charImg   = document.getElementById('char-img');
+const flagEl    = document.getElementById('flag');
+
+let voices = [], studentNumber = '', studentName = '', stage = 'WAIT_GREETING';
+let conversationHistory = [], popupTimer = null;
+
+/* ── CONFIG 초기화: config.py의 CHATBOT_ID → /api/config → 화면 ── */
+let configReady = false;
+
+function applyConfig() {
+    const bg = document.getElementById('bg');
+    bg.innerHTML = '';
+    CONFIG.backgrounds.forEach((src, i) => {
+        const d = document.createElement('div');
+        d.className = 'bg-slide';
+        d.style.backgroundImage = `url('${src}')`;
+        d.style.animationDelay  = `${i * 8}s`;
+        bg.appendChild(d);
+    });
+    flagEl.src = CONFIG.flagImg;
+    flagEl.alt = `${CONFIG.country} flag`;
+    charImg.src = CONFIG.gif.greeting;
+    charImg.alt = CONFIG.characterName;
+    document.getElementById('finale-msg').innerText = CONFIG.finaleMsg;
+    document.getElementById('landing-title').innerText = `🇰🇷 ${CONFIG.landingTitle}`;
+    document.title = `${CONFIG.characterName} - ${CONFIG.country}`;
+}
+
+async function loadChatbotConfig() {
+    const loginBtn = document.getElementById('login-btn');
+    loginBtn.disabled = true;
+    hint.innerText = '챗봇 설정을 불러오는 중입니다...';
+
+    try {
+        const res = await fetch('/api/config', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        CONFIG.characterName = data.characterName;
+        CONFIG.country = data.country;
+        CONFIG.gif = data.gif;
+        CONFIG.backgrounds = data.backgrounds;
+        CONFIG.flagImg = data.flagImg;
+        CONFIG.tts = data.tts;
+        CONFIG.landingTitle = data.landingTitle;
+        CONFIG.finaleMsg = data.finaleMsg;
+
+        applyConfig();
+        configReady = true;
+        hint.innerText = '번호와 이름을 입력해주세요.';
+    } catch (error) {
+        console.error('챗봇 설정 로딩 실패:', error);
+        applyConfig();
+        configReady = true;
+        hint.innerText = '기본 설정으로 시작합니다.';
+    } finally {
+        loginBtn.disabled = false;
+    }
+}
+
+loadChatbotConfig();
+
+/* ── TTS ── */
+function loadVoices() { voices = window.speechSynthesis.getVoices(); }
+loadVoices();
+if (window.speechSynthesis.onvoiceschanged !== undefined)
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+function pickVoice(gender) {
+    const male = gender !== 'female';
+    const hi   = male
+        ? ['google us english','google uk english male','microsoft guy','alex','daniel','tom']
+        : ['google us english','google uk english female','microsoft zira','samantha','karen'];
+    let v = voices.find(v => v.lang.startsWith('en') && hi.some(n => v.name.toLowerCase().includes(n)));
+    if (v) return v;
+    v = voices.find(v => v.lang.startsWith('en') && /natural|premium|enhanced|neural/i.test(v.name));
+    if (v) return v;
+    return voices.find(v => v.lang.startsWith('en')) || null;
+}
+
+function speak(text, cb, displayText=null) {
+    // 챗봇 음성이 학생 답변으로 다시 인식되지 않도록 발화 중 마이크를 잠근다.
+    isBotSpeaking = true;
+    mic.classList.remove('active', 'recording');
+    if (recognition) {
+        try { recognition.abort(); } catch(e) {}
+    }
+
+    window.speechSynthesis.cancel();
+    bubble.innerText = displayText || text;
+    bubble.style.display = 'block';
+    const clean = text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu,'').replace(/\s{2,}/g,' ').trim();
+    const u = new SpeechSynthesisUtterance(clean);
+    u.lang  = 'en-US';
+    u.rate  = CONFIG.tts.childMode ? CONFIG.tts.rate * 0.95 : CONFIG.tts.rate;
+    u.pitch = CONFIG.tts.childMode ? 1.35 : 1.0;
+    const sv = pickVoice(CONFIG.tts.gender);
+    if (sv) u.voice = sv;
+
+    let finished = false;
+    const finishSpeaking = () => {
+        if (finished) return;
+        finished = true;
+        // 스피커 잔향까지 마이크가 잡지 않도록 아주 짧게 기다린 뒤 다시 활성화한다.
+        setTimeout(() => {
+            isBotSpeaking = false;
+            if (String(stage).toLowerCase() !== 'end' && mic.style.display !== 'none') {
+                mic.classList.add('active');
+            }
+            if (cb) cb();
+        }, 450);
+    };
+
+    u.onend = finishSpeaking;
+    u.onerror = finishSpeaking;
+    window.speechSynthesis.speak(u);
+}
+
+/* ── GIF 전환 ── */
+function setGif(text) {
+    const t = text.toLowerCase();
+    const yes = ['yes, i do','i like','i love','yes!','yes,', ' yes ','great','same','of course'];
+    const no  = ['no, i don',"don't","doesn't",'no!',' no ','not like','different'];
+    if (yes.some(w => t.includes(w)))     charImg.src = CONFIG.gif.yes;
+    else if (no.some(w => t.includes(w))) charImg.src = CONFIG.gif.no;
+    else                                   charImg.src = CONFIG.gif.speaking;
+}
+
+/* ── 로그인 ── */
+document.getElementById('login-btn').onclick = () => {
+    if (!configReady) {
+        alert('챗봇 설정을 불러오는 중입니다. 잠시 후 다시 눌러주세요.');
+        return;
+    }
+    const numberValue = document.getElementById('number-input').value.trim();
+    const nameValue = document.getElementById('name-input').value.trim();
+    if (!numberValue || !nameValue) { alert('번호와 이름을 모두 입력해주세요!'); return; }
+    studentNumber = numberValue;
+    studentName = nameValue;
+    document.getElementById('login').style.display = 'none';
+    setTimeout(startApp, 300);
+};
+
+/* ── 앱 시작 ── */
+async function startApp() {
+    mic.classList.remove('active');
+    window.speechSynthesis.cancel();
+    stage = 'WAIT_GREETING';
+    charImg.src = CONFIG.gif.greeting;
+    try {
+        const res = await fetch('/api/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                student_number: studentNumber,
+                student_name: studentName,
+            }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.stage) stage = data.stage;
+        addMsg('luca', data.reply);
+        conversationHistory.push({ role: 'assistant', content: data.reply });
+        speak(data.speech_reply || data.reply, () => {
+            hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
+            data.popup ? setTimeout(() => showPopup(data.popup), 200) : hidePopup();
+        }, data.reply);
+    } catch (error) {
+        console.error('대화 시작 실패:', error);
+        addMsg('luca', 'Sorry. Please try again.');
+        speak('Sorry. Please try again.');
+    }
+}
+
+/* ── 팝업 ── */
+function showPopup(text) {
+    clearTimeout(popupTimer);
+    popup.innerText = '📢 ' + text;
+    popup.classList.add('show');
+}
+function hidePopup() { clearTimeout(popupTimer); popup.classList.remove('show'); }
+function scheduleHide(d=500) { clearTimeout(popupTimer); popupTimer = setTimeout(hidePopup, d); }
+
+/* ── 메시지 추가 ── */
+function addMsg(sender, text) {
+    const t = (sender === 'user' && text.length > 0)
+        ? text.charAt(0).toUpperCase() + text.slice(1)
+        : text.trim();
+
+    const row = document.createElement('div');
+    row.classList.add('row', sender === 'luca' ? 'luca-row' : 'user-row');
+
+    if (sender === 'luca') {
+        const fl = document.createElement('img');
+        fl.src = CONFIG.flagImg; fl.className = 'msg-flag'; fl.alt = '';
+        const bbl = document.createElement('div');
+        bbl.classList.add('msg', 'luca'); bbl.innerText = t;
+        row.append(fl, bbl);
+    } else {
+        const bbl = document.createElement('div');
+        bbl.classList.add('msg', 'user'); bbl.innerText = t;
+        row.append(bbl);
+    }
+    chat.appendChild(row);
+    requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
+}
+
+/* ── 폭죽 ── */
+function burst(x, y, n, dist) {
+    const cl = ['#FF4136','#FF851B','#FFDC00','#2ECC40','#0074D9','#B10DC9','#FF69B4','#fff'];
+    for (let i = 0; i < n; i++) {
+        const s = document.createElement('div'); s.classList.add('spark');
+        const a = Math.random()*Math.PI*2, d = dist*0.4 + Math.random()*dist;
+        s.style.cssText = `left:${x}px;top:${y}px;width:${5+Math.random()*9}px;height:${5+Math.random()*9}px;background:${cl[Math.floor(Math.random()*cl.length)]};--tx:${Math.cos(a)*d}px;--ty:${Math.sin(a)*d}px;animation-delay:${Math.random()*0.4}s;animation-duration:${0.9+Math.random()*0.5}s;`;
+        document.body.appendChild(s); setTimeout(()=>s.remove(),2000);
+    }
+}
+function fireworks() {
+    const cx = innerWidth/2, cy = innerHeight/2;
+    burst(cx,cy,130,280);
+    [[cx*.35,cy*.55],[cx*1.65,cy*.5],[cx,cy*1.35]].forEach(([x,y],i)=>setTimeout(()=>burst(x,y,60,160),(i+1)*400));
+}
+function showFinale() {
+    charImg.src = CONFIG.gif.greeting;
+    [0,800,1600].forEach(d=>setTimeout(fireworks,d));
+    setTimeout(()=>finale.classList.add('show'),600);
+}
+
+/* ── API 호출 ── */
+async function talk(input) {
+    scheduleHide(400);
+    try {
+        const res  = await fetch('/api/chat', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ message:input, history:conversationHistory, stage })
+        });
+        const data = await res.json();
+        const shownInput = data.recognized_text || input;
+        addMsg('user', shownInput);
+        conversationHistory.push({ role:'user', content:shownInput });
+        conversationHistory.push({ role:'assistant', content:data.reply });
+        if (data.stage) stage = data.stage;
+        setGif(data.reply);
+        addMsg('luca', data.reply);
+        const pp = data.popup || null;
+        if (data.fireworks) {
+            hidePopup();
+            speak(data.speech_reply || data.reply, () => { hint.innerText='수고했어요! 🎉'; mic.style.display='none'; showFinale(); });
+        } else {
+            speak(data.speech_reply || data.reply, () => {
+                hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
+                pp ? setTimeout(()=>showPopup(pp),200) : hidePopup();
+            });
+        }
+    } catch(e) {
+        addMsg('luca',"Sorry, I missed that. Can you say it again?");
+        speak("Sorry, I missed that.");
+    }
+}
+
+/* ── STT ── */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+    recognition = new SR();
+    recognition.lang = 'en-US'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    mic.onclick = () => {
+        // 챗봇이 말하는 동안에는 마이크가 절대 시작되지 않는다.
+        if (isBotSpeaking || window.speechSynthesis.speaking) return;
+        if (!mic.classList.contains('active')) return;
+        try { recognition.start(); } catch(e) { return; }
+        mic.classList.add('recording');
+        hint.innerText = 'Listening... 👂 (듣고 있어요)';
+    };
+    recognition.onresult = e => {
+        const t = e.results[0][0].transcript;
+        talk(t);
+    };
+    recognition.onend   = () => mic.classList.remove('recording');
+    recognition.onerror = () => mic.classList.remove('recording');
+} else {
+    alert('크롬 브라우저를 사용해주세요!');
+}
+</script>
+</body>
+</html>
