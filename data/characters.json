@@ -1,6 +1,7 @@
 {
   "Italy": {
     "name": "Luca",
+    "name_aliases": ["Luka", "looker", "look a"],
     "country": "Italy",
     "age": 10,
     "gender": "male",
