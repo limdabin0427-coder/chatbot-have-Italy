@@ -15,6 +15,7 @@
             yes      : "yes.gif",
             no       : "no.gif",
         },
+        introBackground: "school background 1.gif",
         backgrounds: [],
         flagImg    : "italy flag.gif",
         tts: { gender: "male", childMode: true, rate: 0.85 },
@@ -56,7 +57,7 @@
             position: absolute; inset: 0;
             background-size: cover; background-position: center;
             opacity: 0;
-            transition: opacity 1s ease-in-out;
+            transition: opacity 1.5s ease-in-out;
         }
 
         /* ════════════════════════════════════
@@ -373,7 +374,7 @@ const flagEl    = document.getElementById('flag');
 let voices = [], studentNumber = '', studentName = '', stage = 'WAIT_GREETING';
 let conversationHistory = [], popupTimer = null;
 let backgroundTimer = null, backgroundIndex = 0;
-const backgroundDurations = [8000, 8000, 6000];
+const backgroundDuration = 8000;
 
 /* ── CONFIG 초기화: config.py의 CHATBOT_ID → /api/config → 화면 ── */
 let configReady = false;
@@ -381,14 +382,15 @@ let configReady = false;
 function applyConfig() {
     const bg = document.getElementById('bg');
     bg.innerHTML = '';
-    CONFIG.backgrounds.forEach((src, i) => {
+    const introSource = CONFIG.introBackground || CONFIG.backgrounds[0];
+    if (introSource) {
         const d = document.createElement('div');
         d.className = 'bg-slide';
-        d.style.backgroundImage = `url('${src}')`;
-        d.style.opacity = i === 0 ? '1' : '0';
+        d.dataset.backgroundRole = 'intro';
+        d.style.backgroundImage = `url('${introSource}')`;
+        d.style.opacity = '1';
         bg.appendChild(d);
-    });
-    startBackgroundRotation();
+    }
     flagEl.src = CONFIG.flagImg;
     flagEl.alt = `${CONFIG.country} flag`;
     charImg.src = CONFIG.gif.greeting;
@@ -400,23 +402,45 @@ function applyConfig() {
 
 function startBackgroundRotation() {
     clearTimeout(backgroundTimer);
-    const slides = Array.from(document.querySelectorAll('.bg-slide'));
+    const slides = Array.from(document.querySelectorAll('.conversation-bg'));
     if (slides.length < 2) return;
     backgroundIndex = 0;
 
     const showNextBackground = () => {
-        const waitTime = backgroundDurations[backgroundIndex]
-            || backgroundDurations[backgroundDurations.length - 1]
-            || 8000;
         backgroundTimer = setTimeout(() => {
             slides[backgroundIndex].style.opacity = '0';
             backgroundIndex = (backgroundIndex + 1) % slides.length;
             slides[backgroundIndex].style.opacity = '1';
             showNextBackground();
-        }, waitTime);
+        }, backgroundDuration);
     };
 
     showNextBackground();
+}
+
+function startConversationBackgrounds() {
+    clearTimeout(backgroundTimer);
+    const bg = document.getElementById('bg');
+    if (!CONFIG.backgrounds.length) return;
+
+    const introSlide = bg.querySelector('[data-background-role="intro"]');
+    const slides = CONFIG.backgrounds.map((src, index) => {
+        const d = document.createElement('div');
+        d.className = 'bg-slide conversation-bg';
+        d.style.backgroundImage = `url('${src}')`;
+        d.style.opacity = '0';
+        bg.appendChild(d);
+        return d;
+    });
+
+    void bg.offsetWidth;
+    slides[0].style.opacity = '1';
+    if (introSlide) introSlide.style.opacity = '0';
+
+    setTimeout(() => {
+        if (introSlide) introSlide.remove();
+        startBackgroundRotation();
+    }, 1600);
 }
 
 async function loadChatbotConfig() {
@@ -432,6 +456,7 @@ async function loadChatbotConfig() {
         CONFIG.characterName = data.characterName;
         CONFIG.country = data.country;
         CONFIG.gif = data.gif;
+        CONFIG.introBackground = data.introBackground;
         CONFIG.backgrounds = data.backgrounds;
         CONFIG.flagImg = data.flagImg;
         CONFIG.tts = data.tts;
@@ -556,6 +581,7 @@ async function startApp() {
         addMsg('luca', data.reply);
         conversationHistory.push({ role: 'assistant', content: data.reply });
         speak(data.speech_reply || data.reply, () => {
+            startConversationBackgrounds();
             hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
             data.popup ? setTimeout(() => showPopup(data.popup), 200) : hidePopup();
         }, data.reply);
