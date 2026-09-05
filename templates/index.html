@@ -361,6 +361,11 @@ const hint      = document.getElementById('hint');
 const mic       = document.getElementById('mic');
 let recognition = null;
 let isBotSpeaking = false;
+let isListening = false;
+let recognitionActive = false;
+let manualStopRequested = false;
+let recognitionCandidates = [];
+let isSubmittingSpeech = false;
 const finale    = document.getElementById('finale');
 const charImg   = document.getElementById('char-img');
 const flagEl    = document.getElementById('flag');
@@ -469,6 +474,10 @@ function pickVoice(gender) {
 function speak(text, cb, displayText=null) {
     // 챗봇 음성이 학생 답변으로 다시 인식되지 않도록 발화 중 마이크를 잠근다.
     isBotSpeaking = true;
+    isListening = false;
+    recognitionActive = false;
+    manualStopRequested = false;
+    recognitionCandidates = [];
     mic.classList.remove('active', 'recording');
     if (recognition) {
         try { recognition.abort(); } catch(e) {}
@@ -610,12 +619,17 @@ function showFinale() {
 }
 
 /* ── API 호출 ── */
-async function talk(input) {
+async function talk(input, alternatives=[]) {
     scheduleHide(400);
     try {
         const res  = await fetch('/api/chat', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ message:input, history:conversationHistory, stage })
+            body: JSON.stringify({
+                message: input,
+                alternatives,
+                history: conversationHistory,
+                stage,
+            })
         });
         const data = await res.json();
         const shownInput = data.recognized_text || input;
@@ -645,21 +659,97 @@ async function talk(input) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
     recognition = new SR();
-    recognition.lang = 'en-US'; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 5;
+
+    const resetRecognition = (message='🎙️ 버튼을 한 번 누르고 말해 보세요!') => {
+        isListening = false;
+        recognitionActive = false;
+        manualStopRequested = false;
+        recognitionCandidates = [];
+        isSubmittingSpeech = false;
+        mic.classList.remove('recording');
+        hint.innerText = message;
+    };
+
+    const submitRecognition = () => {
+        if (!isListening || isSubmittingSpeech) return;
+        isSubmittingSpeech = true;
+        const candidates = [...new Set(
+            recognitionCandidates.map(text => text.trim()).filter(Boolean)
+        )];
+        if (candidates.length === 0) {
+            resetRecognition('잘 듣지 못했어요. 버튼을 누르고 다시 말해 보세요!');
+            return;
+        }
+
+        isListening = false;
+        recognitionActive = false;
+        manualStopRequested = false;
+        mic.classList.remove('recording', 'active');
+        hint.innerText = '대답을 확인하고 있어요...';
+        talk(candidates[0], candidates.slice(1)).finally(() => {
+            isSubmittingSpeech = false;
+        });
+    };
+
     mic.onclick = () => {
         // 챗봇이 말하는 동안에는 마이크가 절대 시작되지 않는다.
         if (isBotSpeaking || window.speechSynthesis.speaking) return;
         if (!mic.classList.contains('active')) return;
-        try { recognition.start(); } catch(e) { return; }
+
+        if (isListening) {
+            manualStopRequested = true;
+            hint.innerText = '대답을 확인하고 있어요...';
+            if (recognitionActive) {
+                try { recognition.stop(); } catch(e) { submitRecognition(); }
+            } else {
+                submitRecognition();
+            }
+            return;
+        }
+
+        recognitionCandidates = [];
+        manualStopRequested = false;
+        isListening = true;
+        try {
+            recognition.start();
+            recognitionActive = true;
+        } catch(e) {
+            resetRecognition();
+            return;
+        }
         mic.classList.add('recording');
-        hint.innerText = 'Listening... 👂 (듣고 있어요)';
+        hint.innerText = '말한 뒤 버튼을 다시 눌러주세요! 👂';
     };
+
     recognition.onresult = e => {
-        const t = e.results[0][0].transcript;
-        talk(t);
+        for (let resultIndex = e.resultIndex; resultIndex < e.results.length; resultIndex++) {
+            const result = e.results[resultIndex];
+            for (let alternativeIndex = 0; alternativeIndex < result.length; alternativeIndex++) {
+                const transcript = result[alternativeIndex].transcript;
+                if (transcript) recognitionCandidates.push(transcript);
+            }
+        }
     };
-    recognition.onend   = () => mic.classList.remove('recording');
-    recognition.onerror = () => mic.classList.remove('recording');
+
+    recognition.onend = () => {
+        recognitionActive = false;
+        if (!isListening) return;
+        if (manualStopRequested) {
+            submitRecognition();
+        } else {
+            hint.innerText = '말을 마쳤으면 버튼을 다시 눌러주세요!';
+        }
+    };
+
+    recognition.onerror = e => {
+        recognitionActive = false;
+        if (e.error === 'aborted' && isBotSpeaking) return;
+        resetRecognition('잘 듣지 못했어요. 버튼을 누르고 다시 말해 보세요!');
+    };
 } else {
     alert('크롬 브라우저를 사용해주세요!');
 }
