@@ -1,54 +1,37 @@
 {
-  "pencil": {
-    "display_name": "a pencil",
-    "aliases": ["pencil", "a pencil", "pens all", "pencel"]
-  },
-  "ruler": {
-    "display_name": "a ruler",
-    "aliases": ["ruler", "a ruler", "rule her", "roller"]
-  },
-  "eraser": {
-    "display_name": "an eraser",
-    "aliases": ["eraser", "an eraser", "a razor", "erasor"]
-  },
-  "pencil_case": {
-    "display_name": "a pencil case",
-    "aliases": ["pencil case", "a pencil case", "pencilcase"]
-  },
-  "book": {
-    "display_name": "a book",
-    "aliases": ["book", "a book"]
-  },
-  "notebook": {
-    "display_name": "a notebook",
-    "aliases": ["notebook", "a notebook", "note book"]
-  },
-  "bag": {
-    "display_name": "a bag",
-    "aliases": ["bag", "a bag", "a school bag", "schoolbag"]
-  },
-  "soccer_ball": {
-    "display_name": "a soccer ball",
-    "aliases": ["soccer ball", "a soccer ball", "football"]
-  },
-  "pen": {
-    "display_name": "a pen",
-    "aliases": ["pen", "a pen"]
-  },
-  "tape": {
-    "display_name": "tape",
-    "aliases": ["tape", "a tape"]
-  },
-  "brush": {
-    "display_name": "a brush",
-    "aliases": ["brush", "a brush"]
-  },
-  "ball": {
-    "display_name": "a ball",
-    "aliases": ["ball", "a ball"]
-  },
-  "hat": {
-    "display_name": "a hat",
-    "aliases": ["hat", "a hat"]
-  }
+  "pencil": {"display_name": "a pencil", "aliases": ["pencil", "a pencil", "pencel", "pens all"]},
+  "pen": {"display_name": "a pen", "aliases": ["pen", "a pen", "pan", "pin"]},
+  "book": {"display_name": "a book", "aliases": ["book", "a book", "books", "buck"]},
+  "eraser": {"display_name": "an eraser", "aliases": ["eraser", "an eraser", "a eraser", "erasor", "a razor"]},
+  "ball": {"display_name": "a ball", "aliases": ["ball", "a ball", "soccer ball", "a soccer ball", "football", "bowl"]},
+  "brush": {"display_name": "a brush", "aliases": ["brush", "a brush", "blush"]},
+  "cup": {"display_name": "a cup", "aliases": ["cup", "a cup"]},
+  "bag": {"display_name": "a bag", "aliases": ["bag", "a bag", "school bag", "a school bag", "schoolbag", "backpack"]},
+  "cap": {"display_name": "a cap", "aliases": ["cap", "a cap", "cab", "hat", "a hat"]},
+  "tape": {"display_name": "tape", "aliases": ["tape", "a tape", "type"]},
+  "crayons": {"display_name": "crayons", "aliases": ["crayons", "crayon", "a crayon", "a crayons", "crowns"]},
+  "key_cap": {"display_name": "a key cap", "aliases": ["key cap", "a key cap", "keycap", "key cab", "kit kat", "kitkat"]},
+  "key_ring": {"display_name": "a key ring", "aliases": ["key ring", "a key ring", "keyring", "key rain"]},
+  "doll": {"display_name": "a doll", "aliases": ["doll", "a doll"]},
+  "tablet": {"display_name": "a tablet", "aliases": ["tablet", "a tablet", "table it"]},
+  "phone": {"display_name": "a phone", "aliases": ["phone", "a phone", "foam"]},
+  "sister": {"display_name": "a sister", "aliases": ["sister", "a sister", "sisters", "syster"]},
+  "brother": {"display_name": "a brother", "aliases": ["brother", "a brother", "brothers", "brudder"]},
+  "dog": {"display_name": "a dog", "aliases": ["dog", "a dog", "dogs"]},
+  "cat": {"display_name": "a cat", "aliases": ["cat", "a cat", "cats"]},
+  "bird": {"display_name": "a bird", "aliases": ["bird", "a bird", "birds"]},
+  "ruler": {"display_name": "a ruler", "aliases": ["ruler", "a ruler", "rule her", "roller"]},
+  "pencil_case": {"display_name": "a pencil case", "aliases": ["pencil case", "a pencil case", "pencilcase"]},
+  "notebook": {"display_name": "a notebook", "aliases": ["notebook", "a notebook", "note book"]},
+  "desk": {"display_name": "a desk", "aliases": ["desk", "a desk"]},
+  "chair": {"display_name": "a chair", "aliases": ["chair", "a chair", "chairs"]},
+  "box": {"display_name": "a box", "aliases": ["box", "a box"]},
+  "robot": {"display_name": "a robot", "aliases": ["robot", "a robot"]},
+  "bike": {"display_name": "a bike", "aliases": ["bike", "a bike", "bicycle", "a bicycle"]},
+  "kite": {"display_name": "a kite", "aliases": ["kite", "a kite"]},
+  "toy": {"display_name": "a toy", "aliases": ["toy", "a toy", "toys"]},
+  "car": {"display_name": "a car", "aliases": ["car", "a car", "cars"]},
+  "scissors": {"display_name": "scissors", "aliases": ["scissors", "a scissors", "scissor"]},
+  "glue": {"display_name": "glue", "aliases": ["glue", "a glue"]},
+  "marker": {"display_name": "a marker", "aliases": ["marker", "a marker"]}
 }
