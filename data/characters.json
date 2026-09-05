@@ -19,8 +19,8 @@
       "pencil_case": "yes",
       "book": "yes",
       "notebook": "no",
-      "school_bag": "yes",
-      "soccer_ball": "no"
+      "bag": "yes",
+      "ball": "no"
     },
     "images": {
       "flag": "italy flag.gif",
