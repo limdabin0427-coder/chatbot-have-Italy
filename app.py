@@ -184,7 +184,16 @@ def save_log(corrected, original, reply, stage):
         traceback.print_exc()
 
 
-def respond(reply, popup, next_stage, fireworks=False, original="", corrected=None, speech_reply=None):
+def respond(
+    reply,
+    popup,
+    next_stage,
+    fireworks=False,
+    original="",
+    corrected=None,
+    speech_reply=None,
+    reaction="speaking",
+):
     corrected = corrected if corrected is not None else original
     history = session.get("chat_history", [])
     if corrected:
@@ -200,6 +209,7 @@ def respond(reply, popup, next_stage, fireworks=False, original="", corrected=No
         "stage": next_stage,
         "fireworks": fireworks,
         "recognized_text": corrected,
+        "reaction": reaction,
     })
 
 
@@ -279,7 +289,6 @@ def chat():
             "오늘의 기분을 영어로 말해 보세요.",
             Stage.WAIT_FEELING.value,
             original=original,
-            corrected="Hello!",
         )
 
     if stage == Stage.WAIT_FEELING.value:
@@ -333,8 +342,10 @@ def chat():
         if item:
             answer = get_item_answer(CHARACTER, item["key"])
             reply = make_item_response(answer, item["display_name"]) + ending
+            reaction = answer
         else:
             reply = "No, I don't." + ending
+            reaction = "no"
         return respond(
             reply,
             popup,
@@ -342,6 +353,7 @@ def chat():
             fireworks=next_stage == Stage.END.value,
             original=original,
             corrected=corrected,
+            reaction=reaction,
         )
 
     return respond(ENDING_MESSAGE, None, Stage.END.value, fireworks=True, original=original)
