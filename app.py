@@ -100,6 +100,20 @@ def is_greeting(message):
     return any(word in text for word in greetings)
 
 
+def normalize_character_name(message):
+    text = str(message or "").strip()
+    aliases = [CHARACTER_NAME, *CHARACTER.get("name_aliases", [])]
+    aliases = sorted(
+        {str(alias).strip() for alias in aliases if str(alias).strip()},
+        key=len,
+        reverse=True,
+    )
+    if not aliases:
+        return text
+    pattern = r"(?<!\w)(?:" + "|".join(re.escape(alias) for alias in aliases) + r")(?!\w)"
+    return re.sub(pattern, CHARACTER_NAME, text, flags=re.IGNORECASE)
+
+
 def parse_yes_no(message):
     text = clean_text(message)
     negatives = ["no", "no i dont", "no i don t", "i dont", "i don t", "do not", "아니", "없어"]
@@ -111,11 +125,22 @@ def parse_yes_no(message):
     return None
 
 
-def feeling_reply(message):
+def feeling_category(message):
     text = clean_text(message)
-    if any(word in text for word in ["tired", "sleepy", "sad", "not good"]):
-        return "I see. Let's study together!"
+    if any(word in text for word in ["not good", "tired", "sleepy", "sad", "sick", "angry", "bad"]):
+        return "negative"
     if any(word in text for word in ["happy", "great", "good", "fine"]):
+        return "positive"
+    if any(word in text for word in ["okay", "ok", "so so"]):
+        return "neutral"
+    return "unknown"
+
+
+def feeling_reply(message):
+    category = feeling_category(message)
+    if category == "negative":
+        return "I see. Let's study together!"
+    if category == "positive":
         return "Good! Now, let's study together!"
     return "Okay! Let's study together!"
 
@@ -257,6 +282,7 @@ def start_chat():
     session["student_name"] = student_name
     session["asked_items"] = []
     session["chat_history"] = []
+    session["feeling_attempts"] = 0
 
     display_reply = f"Hi, {student_name}! {CHARACTER['intro_message']}"
     return respond(
@@ -289,9 +315,20 @@ def chat():
             "오늘의 기분을 영어로 말해 보세요.",
             Stage.WAIT_FEELING.value,
             original=original,
+            corrected=normalize_character_name(original),
         )
 
     if stage == Stage.WAIT_FEELING.value:
+        category = feeling_category(original)
+        attempts = session.get("feeling_attempts", 0)
+        if category == "unknown" and attempts == 0:
+            session["feeling_attempts"] = 1
+            return respond(
+                "How are you today?",
+                "오늘의 기분을 영어로 다시 말해 보세요.",
+                Stage.WAIT_FEELING.value,
+                original=original,
+            )
         return respond(
             feeling_reply(original),
             "활동지의 물음을 보고 질문해 보세요.",
