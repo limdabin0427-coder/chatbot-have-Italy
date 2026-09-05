@@ -36,13 +36,27 @@ def find_item(text):
     return None
 
 
-def is_have_question(text):
+def extract_have_object(text):
     cleaned = clean_text(text)
-    return "do you have" in cleaned and find_item(text) is not None
+    match = re.search(r"\bdo\s+you\s+have\b\s+(.+)$", cleaned)
+    if not match:
+        return None
+
+    object_name = match.group(1).strip()
+    object_name = re.sub(r"^(?:a|an|the)\s+", "", object_name)
+    return object_name or None
+
+
+def is_have_question(text):
+    return extract_have_object(text) is not None
 
 
 def normalize_have_question(text):
     item = find_item(text)
-    if not item:
-        return text.strip()
-    return f"Do you have {item['display_name']}?"
+    if item:
+        return f"Do you have {item['display_name']}?"
+
+    object_name = extract_have_object(text)
+    if object_name:
+        return f"Do you have {object_name}?"
+    return text.strip()
