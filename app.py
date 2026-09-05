@@ -298,6 +298,7 @@ def chatbot_config():
             "yes": character_images.get("yes", "yes.gif"),
             "no": character_images.get("no", "no.gif"),
         },
+        "introBackground": images.get("intro_background", ""),
         "backgrounds": images.get("backgrounds", []),
         "flagImg": images.get("flag", ""),
         "tts": {
