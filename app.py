@@ -257,15 +257,19 @@ def respond(
     corrected=None,
     speech_reply=None,
     reaction="speaking",
+    followup_reply=None,
 ):
     corrected = corrected if corrected is not None else original
+    full_reply = " ".join(
+        part.strip() for part in [reply, followup_reply] if part and part.strip()
+    )
     history = session.get("chat_history", [])
     if corrected:
         history.append({"role": "user", "content": corrected})
-    history.append({"role": "assistant", "content": reply})
+    history.append({"role": "assistant", "content": full_reply})
     session["chat_history"] = history[-MAX_HISTORY_MESSAGES:]
     session.modified = True
-    save_log(corrected, original, reply, next_stage)
+    save_log(corrected, original, full_reply, next_stage)
     return jsonify({
         "reply": reply,
         "speech_reply": speech_reply or reply,
@@ -274,6 +278,7 @@ def respond(
         "fireworks": fireworks,
         "recognized_text": corrected,
         "reaction": reaction,
+        "followup_reply": followup_reply,
     })
 
 
@@ -387,14 +392,14 @@ def chat():
         Stage.STUDENT_QUESTION_1.value: (
             Stage.STUDENT_QUESTION_2.value,
             "활동지를 보고 두 번째 물품을 물어보세요.",
-            " Ask me one more question.",
+            "Ask me one more question.",
         ),
         Stage.STUDENT_QUESTION_2.value: (
             Stage.STUDENT_QUESTION_3.value,
             "물품을 하나 골라 마지막 질문을 해 보세요.",
-            " Great! Choose one more item and ask me.",
+            "Great! Choose one more item and ask me.",
         ),
-        Stage.STUDENT_QUESTION_3.value: (Stage.END.value, None, f" {ENDING_MESSAGE}"),
+        Stage.STUDENT_QUESTION_3.value: (Stage.END.value, None, ENDING_MESSAGE),
     }
 
     if stage in question_stages:
@@ -422,13 +427,13 @@ def chat():
 
         asked_items.append(asked_key)
         session["asked_items"] = asked_items
-        next_stage, popup, ending = question_stages[stage]
+        next_stage, popup, followup_reply = question_stages[stage]
         if item:
             answer = get_item_answer(CHARACTER, item["key"])
-            reply = make_item_response(answer, item["display_name"]) + ending
+            reply = make_item_response(answer, item["display_name"])
             reaction = answer
         else:
-            reply = "No, I don't." + ending
+            reply = "No, I don't."
             reaction = "no"
         return respond(
             reply,
@@ -438,6 +443,7 @@ def chat():
             original=original,
             corrected=corrected,
             reaction=reaction,
+            followup_reply=followup_reply,
         )
 
     return respond(ENDING_MESSAGE, None, Stage.END.value, fireworks=True, original=original)
