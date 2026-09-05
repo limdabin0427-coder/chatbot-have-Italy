@@ -3,7 +3,7 @@
   "pen": {"display_name": "a pen", "aliases": ["pen", "a pen", "pan", "pin"]},
   "book": {"display_name": "a book", "aliases": ["book", "a book", "books", "buck"]},
   "eraser": {"display_name": "an eraser", "aliases": ["eraser", "an eraser", "a eraser", "erasor", "a razor"]},
-  "ball": {"display_name": "a ball", "aliases": ["ball", "a ball", "soccer ball", "a soccer ball", "football", "bowl"]},
+  "ball": {"display_name": "a ball", "aliases": ["ball", "a ball", "soccer ball", "a soccer ball", "football", "bowl", "boy"]},
   "brush": {"display_name": "a brush", "aliases": ["brush", "a brush", "blush"]},
   "cup": {"display_name": "a cup", "aliases": ["cup", "a cup"]},
   "bag": {"display_name": "a bag", "aliases": ["bag", "a bag", "school bag", "a school bag", "schoolbag", "backpack"]},
