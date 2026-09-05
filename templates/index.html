@@ -661,20 +661,35 @@ async function talk(input, alternatives=[]) {
         const shownInput = data.recognized_text || input;
         addMsg('user', shownInput);
         conversationHistory.push({ role:'user', content:shownInput });
-        conversationHistory.push({ role:'assistant', content:data.reply });
+        const fullAssistantReply = [data.reply, data.followup_reply]
+            .filter(Boolean)
+            .join(' ');
+        conversationHistory.push({ role:'assistant', content:fullAssistantReply });
         if (data.stage) stage = data.stage;
         setGif(data.reaction);
         addMsg('luca', data.reply);
         const pp = data.popup || null;
-        if (data.fireworks) {
-            hidePopup();
-            speak(data.speech_reply || data.reply, () => { hint.innerText='수고했어요! 🎉'; mic.style.display='none'; showFinale(); });
-        } else {
-            speak(data.speech_reply || data.reply, () => {
+        const finishTurn = () => {
+            if (data.fireworks) {
+                hidePopup();
+                hint.innerText = '수고했어요! 🎉';
+                mic.style.display = 'none';
+                showFinale();
+            } else {
                 hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
                 pp ? setTimeout(()=>showPopup(pp),200) : hidePopup();
-            });
-        }
+            }
+        };
+
+        speak(data.speech_reply || data.reply, () => {
+            if (data.followup_reply) {
+                setGif('speaking');
+                addMsg('luca', data.followup_reply);
+                speak(data.followup_reply, finishTurn);
+            } else {
+                finishTurn();
+            }
+        });
     } catch(e) {
         addMsg('luca',"Sorry, I missed that. Can you say it again?");
         speak("Sorry, I missed that.");
