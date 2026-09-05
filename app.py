@@ -88,6 +88,45 @@ def normalize_stage(stage):
     return aliases.get(stage, stage or Stage.WAIT_GREETING.value)
 
 
+def select_recognition_candidate(primary, alternatives, stage):
+    candidates = []
+    for value in [primary, *(alternatives or [])]:
+        candidate = str(value or "").strip()
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    if not candidates:
+        return ""
+
+    if stage == Stage.WAIT_GREETING.value:
+        return next((text for text in candidates if is_greeting(text)), candidates[0])
+
+    if stage == Stage.WAIT_FEELING.value:
+        return next(
+            (text for text in candidates if feeling_category(text) != "unknown"),
+            candidates[0],
+        )
+
+    question_stage_values = {
+        Stage.STUDENT_QUESTION_1.value,
+        Stage.STUDENT_QUESTION_2.value,
+        Stage.STUDENT_QUESTION_3.value,
+    }
+    if stage in question_stage_values:
+        known_questions = [
+            text for text in candidates
+            if is_have_question(text) and find_item(text)
+        ]
+        if known_questions:
+            return known_questions[0]
+        return next(
+            (text for text in candidates if is_have_question(text)),
+            candidates[0],
+        )
+
+    return candidates[0]
+
+
 def safe_login_value(value, fallback=""):
     value = str(value or "").strip()
     value = re.sub(r"[<>\r\n\t]", "", value)
@@ -296,8 +335,15 @@ def start_chat():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json(force=True, silent=True) or {}
-    original = (data.get("message") or "").strip()
     stage = normalize_stage((data.get("stage") or "").strip())
+    alternatives = data.get("alternatives")
+    if not isinstance(alternatives, list):
+        alternatives = []
+    original = select_recognition_candidate(
+        data.get("message"),
+        alternatives[:5],
+        stage,
+    )
 
     if not original:
         return respond("Please say that again.", "다시 한 번 말해 보세요.", stage, original=original)
