@@ -26,7 +26,13 @@ from config import (
 )
 from data_loader import CHARACTERS
 from dialogue_manager import get_item_answer, make_item_response
-from item_utils import clean_text, find_item, is_have_question, normalize_have_question
+from item_utils import (
+    clean_text,
+    extract_have_object,
+    find_item,
+    is_have_question,
+    normalize_have_question,
+)
 
 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -313,15 +319,12 @@ def chat():
 
     if stage in question_stages:
         item = find_item(original)
-        if not item:
-            return respond(
-                ai_scaffold_reply(original, "Do you have a ruler?"),
-                "활동지의 물품을 보고 질문해 보세요.",
-                stage,
-                original=original,
-            )
         if not is_have_question(original):
-            example = f"Do you have {item['display_name']}?"
+            example = (
+                f"Do you have {item['display_name']}?"
+                if item
+                else "Do you have a pencil?"
+            )
             return respond(
                 ai_scaffold_reply(original, example),
                 f'"{example}"라고 다시 말해 보세요.',
@@ -331,7 +334,9 @@ def chat():
 
         corrected = normalize_have_question(original)
         asked_items = session.get("asked_items", [])
-        if item["key"] in asked_items:
+        object_name = extract_have_object(original)
+        asked_key = item["key"] if item else f"free:{clean_text(object_name)}"
+        if asked_key in asked_items:
             return respond(
                 "You already asked me that. Please choose a different item.",
                 "다른 물품을 골라 질문해 보세요.",
@@ -340,11 +345,14 @@ def chat():
                 corrected=corrected,
             )
 
-        asked_items.append(item["key"])
+        asked_items.append(asked_key)
         session["asked_items"] = asked_items
         next_stage, popup, ending = question_stages[stage]
-        answer = get_item_answer(CHARACTER, item["key"])
-        reply = make_item_response(answer, item["display_name"]) + ending
+        if item:
+            answer = get_item_answer(CHARACTER, item["key"])
+            reply = make_item_response(answer, item["display_name"]) + ending
+        else:
+            reply = "No, I don't." + ending
         return respond(
             reply,
             popup,
