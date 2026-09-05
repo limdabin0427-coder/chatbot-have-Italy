@@ -163,19 +163,6 @@ Accept short, imperfect, or mixed Korean-English answers.
     return result if result in {"yes", "no"} else None
 
 
-def ai_scaffold_reply(message, example):
-    fallback = f'Good try! Say, "{example}"'
-    prompt = f"""
-You are {CHARACTER_NAME}, a friendly AI partner for Korean grade-3 English beginners.
-The learner is doing a short controlled speaking task about "Do you have...?"
-The learner said: {message}
-Give supportive corrective feedback in one or two very short A1 sentences.
-End by giving this exact model expression: {example}
-Do not explain grammar. Do not use Korean or emojis.
-""".strip()
-    return call_gpt(prompt, message, fallback)
-
-
 def save_log(corrected, original, reply, stage):
     if sheet is None:
         return
@@ -320,14 +307,9 @@ def chat():
     if stage in question_stages:
         item = find_item(original)
         if not is_have_question(original):
-            example = (
-                f"Do you have {item['display_name']}?"
-                if item
-                else "Do you have a pencil?"
-            )
             return respond(
-                ai_scaffold_reply(original, example),
-                f'"{example}"라고 다시 말해 보세요.',
+                "Great try! Can you say that again?",
+                '“Do you have ~?”로 다시 질문해 보세요.',
                 stage,
                 original=original,
             )
