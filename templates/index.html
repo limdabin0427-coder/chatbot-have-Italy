@@ -505,13 +505,10 @@ function speak(text, cb, displayText=null) {
 }
 
 /* ── GIF 전환 ── */
-function setGif(text) {
-    const t = text.toLowerCase();
-    const yes = ['yes, i do','i like','i love','yes!','yes,', ' yes ','great','same','of course'];
-    const no  = ['no, i don',"don't","doesn't",'no!',' no ','not like','different'];
-    if (yes.some(w => t.includes(w)))     charImg.src = CONFIG.gif.yes;
-    else if (no.some(w => t.includes(w))) charImg.src = CONFIG.gif.no;
-    else                                   charImg.src = CONFIG.gif.speaking;
+function setGif(reaction) {
+    if (reaction === 'yes')      charImg.src = CONFIG.gif.yes;
+    else if (reaction === 'no')  charImg.src = CONFIG.gif.no;
+    else                         charImg.src = CONFIG.gif.speaking;
 }
 
 /* ── 로그인 ── */
@@ -626,7 +623,7 @@ async function talk(input) {
         conversationHistory.push({ role:'user', content:shownInput });
         conversationHistory.push({ role:'assistant', content:data.reply });
         if (data.stage) stage = data.stage;
-        setGif(data.reply);
+        setGif(data.reaction);
         addMsg('luca', data.reply);
         const pp = data.popup || null;
         if (data.fireworks) {
