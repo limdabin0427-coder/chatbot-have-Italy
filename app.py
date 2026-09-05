@@ -107,11 +107,11 @@ def parse_yes_no(message):
 
 def feeling_reply(message):
     text = clean_text(message)
-    if any(word in text for word in ["happy", "great", "good", "fine"]):
-        return "Great!"
     if any(word in text for word in ["tired", "sleepy", "sad", "not good"]):
-        return "I see."
-    return "Okay!"
+        return "I see. Let's study together!"
+    if any(word in text for word in ["happy", "great", "good", "fine"]):
+        return "Good! Now, let's study together!"
+    return "Okay! Let's study together!"
 
 
 def call_gpt(system_prompt, user_message, fallback):
@@ -290,35 +290,11 @@ def chat():
         )
 
     if stage == Stage.WAIT_FEELING.value:
-        reply = (
-            f"{ai_feeling_reply(original)} Let's study together! "
-            "Oh, no! I don't have a pencil. Do you have a pencil?"
-        )
         return respond(
-            reply,
-            '"Yes, I do." 또는 "No, I don\'t."로 대답해 보세요.',
-            Stage.WAIT_BOT_QUESTION_ANSWER.value,
-            original=original,
-        )
-
-    if stage == Stage.WAIT_BOT_QUESTION_ANSWER.value:
-        answer = parse_yes_no(original)
-        if answer is None:
-            answer = ai_classify_yes_no(original)
-        if answer is None:
-            return respond(
-                ai_scaffold_reply(original, "Yes, I do. / No, I don't."),
-                '"Yes, I do." 또는 "No, I don\'t."로 대답해 보세요.',
-                stage,
-                original=original,
-            )
-        reaction = "Great! You have a pencil." if answer == "yes" else "That's okay!"
-        return respond(
-            f'{reaction} Now, it\'s your turn! Ask me, "Do you have a ruler?"',
-            "활동지를 보고 첫 번째 물품을 물어보세요.",
+            feeling_reply(original),
+            "활동지의 물음을 보고 질문해 보세요.",
             Stage.STUDENT_QUESTION_1.value,
             original=original,
-            corrected="Yes, I do." if answer == "yes" else "No, I don't.",
         )
 
     question_stages = {
