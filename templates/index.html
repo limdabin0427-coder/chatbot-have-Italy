@@ -571,9 +571,7 @@ function scheduleHide(d=500) { clearTimeout(popupTimer); popupTimer = setTimeout
 
 /* ── 메시지 추가 ── */
 function addMsg(sender, text) {
-    const t = (sender === 'user' && text.length > 0)
-        ? text.charAt(0).toUpperCase() + text.slice(1)
-        : text.trim();
+    const t = text.trim();
 
     const row = document.createElement('div');
     row.classList.add('row', sender === 'luca' ? 'luca-row' : 'user-row');
