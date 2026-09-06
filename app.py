@@ -182,23 +182,23 @@ def parse_yes_no(message):
 
 def feeling_category(message):
     text = clean_text(message)
-    if any(word in text for word in ["not good", "tired", "sleepy", "sad", "sick", "angry", "bad"]):
-        return "negative"
-    if any(word in text for word in ["happy", "great", "good", "fine"]):
-        return "positive"
-    if any(word in text for word in ["okay", "ok", "so so"]):
+    if any(word in text for word in ["okay", "ok", "so so", "not bad"]):
         return "neutral"
+    if any(word in text for word in ["not good", "unhappy", "tired", "sleepy", "sad", "sick", "angry", "bad"]):
+        return "negative"
+    if any(word in text for word in ["happy", "great", "good", "fine", "perfect", "awesome", "wonderful"]):
+        return "positive"
     return "unknown"
-
 
 def feeling_reply(message):
     category = feeling_category(message)
     if category == "negative":
-        return "I see. Let's study together!"
+        return "I see. I hope you feel better. Let's study together!"
     if category == "positive":
-        return "Good! Now, let's study together!"
-    return "Okay! Let's study together!"
-
+        return "Good! I'm good, too. Let's study together!"
+    if category == "neutral":
+        return "Okay! Then, let's have fun together!"
+    return "That's okay! Now, let's study together!"
 
 def call_gpt(system_prompt, user_message, fallback):
     """제한된 생성형 피드백. 실패하면 수업 흐름을 지키는 기본 응답을 사용한다."""
