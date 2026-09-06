@@ -522,7 +522,13 @@ function pickVoice(gender) {
     return voices.find(v => v.lang.startsWith('en')) || null;
 }
 
-function speak(text, cb, displayText=null) {
+let activeAudio = null;
+const ttsAudioCache = new Map();
+const ttsClientId = sessionStorage.getItem('ttsClientId') ||
+    ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+sessionStorage.setItem('ttsClientId', ttsClientId);
+
+function speak(text, cb, displayText=null, ttsToken=null) {
     // 챗봇 음성이 학생 답변으로 다시 인식되지 않도록 발화 중 마이크를 잠근다.
     isBotSpeaking = true;
     isListening = false;
@@ -535,17 +541,15 @@ function speak(text, cb, displayText=null) {
     }
 
     window.speechSynthesis.cancel();
+    if (activeAudio) {
+        activeAudio.pause();
+        activeAudio = null;
+    }
     bubble.innerText = displayText || text;
     bubble.style.display = 'block';
     const clean = text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu,'').replace(/\s{2,}/g,' ').trim();
-    const u = new SpeechSynthesisUtterance(clean);
-    u.lang  = 'en-US';
-    u.rate  = CONFIG.tts.childMode ? CONFIG.tts.rate * 0.95 : CONFIG.tts.rate;
-    u.pitch = CONFIG.tts.childMode ? 1.35 : 1.0;
-    const sv = pickVoice(CONFIG.tts.gender);
-    if (sv) u.voice = sv;
-
     let finished = false;
+    let fallbackStarted = false;
     const finishSpeaking = () => {
         if (finished) return;
         finished = true;
@@ -559,9 +563,61 @@ function speak(text, cb, displayText=null) {
         }, 450);
     };
 
-    u.onend = finishSpeaking;
-    u.onerror = finishSpeaking;
-    window.speechSynthesis.speak(u);
+    const browserFallback = () => {
+        if (fallbackStarted || finished) return;
+        fallbackStarted = true;
+        const u = new SpeechSynthesisUtterance(clean);
+        u.lang  = 'en-US';
+        u.rate  = CONFIG.tts.childMode ? CONFIG.tts.rate * 0.95 : CONFIG.tts.rate;
+        u.pitch = CONFIG.tts.childMode ? 1.35 : 1.0;
+        const sv = pickVoice(CONFIG.tts.gender);
+        if (sv) u.voice = sv;
+        u.onend = finishSpeaking;
+        u.onerror = finishSpeaking;
+        window.speechSynthesis.speak(u);
+    };
+
+    const playAudioBlob = (blob) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const audio = new Audio(objectUrl);
+        activeAudio = audio;
+        const cleanup = () => {
+            if (activeAudio === audio) activeAudio = null;
+            URL.revokeObjectURL(objectUrl);
+        };
+        audio.onended = () => { cleanup(); finishSpeaking(); };
+        audio.onerror = () => { cleanup(); browserFallback(); };
+        audio.play().catch(() => { cleanup(); browserFallback(); });
+    };
+
+    if (CONFIG.tts.provider !== 'openai' || !ttsToken) {
+        browserFallback();
+        return;
+    }
+
+    if (ttsAudioCache.has(ttsToken)) {
+        playAudioBlob(ttsAudioCache.get(ttsToken));
+        return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6500);
+    fetch('/api/tts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, token: ttsToken, client_id: ttsClientId}),
+        signal: controller.signal,
+    })
+        .then(response => {
+            if (!response.ok) throw new Error(`TTS HTTP ${response.status}`);
+            return response.blob();
+        })
+        .then(blob => {
+            ttsAudioCache.set(ttsToken, blob);
+            playAudioBlob(blob);
+        })
+        .catch(() => browserFallback())
+        .finally(() => clearTimeout(timeout));
 }
 
 /* ── GIF 전환 ── */
@@ -610,7 +666,7 @@ async function startApp() {
             startConversationBackgrounds();
             hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
             data.popup ? setTimeout(() => showPopup(data.popup), 200) : hidePopup();
-        }, data.reply);
+        }, data.reply, data.tts_token);
     } catch (error) {
         console.error('대화 시작 실패:', error);
         addMsg('luca', 'Sorry. Please try again.');
@@ -697,7 +753,7 @@ retryBtn.onclick = async () => {
         speak(data.reply, () => {
             hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
             data.popup ? showPopup(data.popup) : hidePopup();
-        });
+        }, null, data.tts_token);
     } catch (error) {
         alert('다시 질문하기를 시작하지 못했어요. 다시 눌러주세요.');
     } finally {
@@ -746,11 +802,11 @@ async function talk(input, alternatives=[]) {
             if (data.followup_reply) {
                 setGif('speaking');
                 addMsg('luca', data.followup_reply);
-                speak(data.followup_reply, finishTurn);
+                speak(data.followup_reply, finishTurn, null, data.followup_tts_token);
             } else {
                 finishTurn();
             }
-        });
+        }, null, data.tts_token);
     } catch(e) {
         addMsg('luca',"Sorry, I missed that. Can you say it again?");
         speak("Sorry, I missed that.");
