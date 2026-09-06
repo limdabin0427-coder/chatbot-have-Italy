@@ -21,6 +21,7 @@
         tts: { gender: "male", childMode: true, rate: 0.85 },
         landingTitle: "Hello, Korea!",
         finaleMsg  : "Come visit Italy next time!\n다음에는 이탈리아에서 만나요!",
+        homeUrl    : "",
     };
     </script>
 
@@ -84,6 +85,12 @@
             border-radius: 4px;
             box-shadow: 0 3px 10px rgba(0,0,0,0.4);
             z-index: 20;
+        }
+        #home-btn {
+            position:fixed; top:14px; right:14px; z-index:10000;
+            width:48px; height:48px; border:none; border-radius:50%;
+            background:rgba(255,255,255,0.94); box-shadow:0 3px 12px rgba(0,0,0,0.25);
+            font-size:25px; cursor:pointer;
         }
 
         /* 말풍선 */
@@ -272,15 +279,25 @@
         /* ── 피날레 ── */
         #finale { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.80); z-index:9998; justify-content:center; align-items:center; }
         #finale.show { display:flex; }
-        #finale-msg {
+        #finale-card {
             background: linear-gradient(135deg,#fff9e6,#fff);
             color:#2a2a2a; padding:28px 24px; border-radius:22px;
-            font-size:clamp(16px,4.5vw,20px); font-weight:800;
             text-align:center; line-height:1.75;
             box-shadow:0 12px 40px rgba(0,0,0,0.4);
             max-width:min(310px,90vw); border:3px solid #FFD700;
+        }
+        #finale-msg {
+            font-size:clamp(16px,4.5vw,20px); font-weight:800;
             white-space:pre-wrap;
         }
+        #retry-btn {
+            margin-top:18px; width:100%; padding:12px 16px;
+            border:none; border-radius:12px; cursor:pointer;
+            background:linear-gradient(135deg,#00b09b,#96c93d);
+            color:#fff; font-size:clamp(14px,3.8vw,17px); font-weight:800;
+            line-height:1.35;
+        }
+        #retry-btn:disabled { opacity:0.55; cursor:default; }
         .spark { position:fixed; border-radius:50%; pointer-events:none; z-index:9997; animation:sparkFly 1.3s ease-out forwards; }
         @keyframes sparkFly { 0%{transform:translate(0,0) scale(1);opacity:1} 100%{transform:translate(var(--tx),var(--ty)) scale(0.1);opacity:0} }
 
@@ -322,11 +339,17 @@
 </div>
 
 <!-- 피날레 -->
-<div id="finale"><div id="finale-msg"></div></div>
+<div id="finale">
+    <div id="finale-card">
+        <div id="finale-msg"></div>
+        <button id="retry-btn">🔁 Ask Again<br>다시 질문하기</button>
+    </div>
+</div>
 
 <!-- 메인 -->
 <div id="app">
     <div id="bg"></div>
+    <button id="home-btn" title="홈으로 돌아가기" aria-label="홈으로 돌아가기">🏠</button>
 
     <!-- 상단 50% -->
     <div id="top">
@@ -368,6 +391,8 @@ let manualStopRequested = false;
 let recognitionCandidates = [];
 let isSubmittingSpeech = false;
 const finale    = document.getElementById('finale');
+const retryBtn  = document.getElementById('retry-btn');
+const homeBtn   = document.getElementById('home-btn');
 const charImg   = document.getElementById('char-img');
 const flagEl    = document.getElementById('flag');
 
@@ -462,6 +487,7 @@ async function loadChatbotConfig() {
         CONFIG.tts = data.tts;
         CONFIG.landingTitle = data.landingTitle;
         CONFIG.finaleMsg = data.finaleMsg;
+        CONFIG.homeUrl = data.homeUrl || "";
 
         applyConfig();
         configReady = true;
@@ -643,6 +669,41 @@ function showFinale() {
     [0,800,1600].forEach(d=>setTimeout(fireworks,d));
     setTimeout(()=>finale.classList.add('show'),600);
 }
+
+homeBtn.onclick = () => {
+    if (CONFIG.homeUrl) {
+        window.location.href = CONFIG.homeUrl;
+    } else {
+        alert('홈 화면을 준비하고 있어요.');
+    }
+};
+
+retryBtn.onclick = async () => {
+    retryBtn.disabled = true;
+    try {
+        const res = await fetch('/api/retry-question', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        finale.classList.remove('show');
+        stage = data.stage;
+        mic.style.display = 'block';
+        setGif(data.reaction || 'speaking');
+        addMsg('luca', data.reply);
+        conversationHistory.push({role:'assistant', content:data.reply});
+        speak(data.reply, () => {
+            hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
+            data.popup ? showPopup(data.popup) : hidePopup();
+        });
+    } catch (error) {
+        alert('다시 질문하기를 시작하지 못했어요. 다시 눌러주세요.');
+    } finally {
+        retryBtn.disabled = false;
+    }
+};
 
 /* ── API 호출 ── */
 async function talk(input, alternatives=[]) {
