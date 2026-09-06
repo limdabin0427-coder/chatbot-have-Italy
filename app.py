@@ -61,6 +61,7 @@ TTS_RATE_WINDOW_SECONDS = 60
 TTS_CACHE_MAX_ITEMS = 256
 tts_cache = OrderedDict()
 tts_requests = defaultdict(deque)
+stt_requests = defaultdict(deque)
 tts_lock = threading.Lock()
 
 
@@ -291,6 +292,21 @@ def tts_rate_limited(client_id):
     return False
 
 
+def stt_rate_limited(client_id):
+    now = time.monotonic()
+    key = re.sub(r"[^A-Za-z0-9_-]", "", str(client_id or ""))[:80]
+    if not key:
+        key = (request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown").split(",")[0]
+    with tts_lock:
+        recent = stt_requests[key]
+        while recent and now - recent[0] > 60:
+            recent.popleft()
+        if len(recent) >= 20:
+            return True
+        recent.append(now)
+    return False
+
+
 def respond(
     reply,
     popup,
@@ -415,6 +431,47 @@ def synthesize_speech():
         print(f"⚠️ OpenAI TTS 실패, 브라우저 음성으로 전환: {type(error).__name__}: {error}")
         return jsonify({"error": "tts_unavailable"}), 503
 
+
+@app.route("/api/transcribe", methods=["POST"])
+def transcribe_speech():
+    """Apple 모바일에서는 불안정한 Safari 받아쓰기 대신 녹음 파일을 변환한다."""
+    audio_file = request.files.get("audio")
+    client_id = request.form.get("client_id")
+    if audio_file is None:
+        return jsonify({"error": "audio_required"}), 400
+    if stt_rate_limited(client_id):
+        return jsonify({"error": "rate_limited"}), 429
+    if tts_client is None:
+        return jsonify({"error": "stt_unavailable"}), 503
+
+    audio_bytes = audio_file.read(4 * 1024 * 1024 + 1)
+    if not audio_bytes or len(audio_bytes) > 4 * 1024 * 1024:
+        return jsonify({"error": "invalid_audio"}), 400
+
+    mime_type = audio_file.mimetype or "audio/mp4"
+    filename = audio_file.filename or ("speech.webm" if "webm" in mime_type else "speech.m4a")
+    prompt = (
+        f"A Korean third-grade student is speaking short English sentences to {CHARACTER_NAME}. "
+        "Likely phrases include: Hello, Hi, I am happy, I am good, I am fine, I am tired, "
+        "I am sad, and Do you have a pencil, pen, book, eraser, ruler, ball, brush, cup, "
+        "bag, cap, tape, crayons, key cap, key ring, doll, tablet, phone, dog, cat, or bird? "
+        f"The character's name is spelled {CHARACTER_NAME}. Preserve the student's actual words."
+    )
+    try:
+        result = tts_client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=(filename, audio_bytes, mime_type),
+            language="en",
+            prompt=prompt,
+            response_format="json",
+        )
+        transcript = str(getattr(result, "text", "") or "").strip()
+        if not transcript:
+            return jsonify({"error": "empty_transcript"}), 422
+        return jsonify({"text": transcript})
+    except Exception as error:
+        print(f"⚠️ OpenAI STT 실패: {type(error).__name__}: {error}")
+        return jsonify({"error": "stt_unavailable"}), 503
 
 @app.route("/api/start", methods=["POST"])
 def start_chat():
