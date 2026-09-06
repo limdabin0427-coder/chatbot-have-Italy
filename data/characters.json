@@ -41,6 +41,10 @@
       }
     },
     "tts": {
+      "provider": "openai",
+      "model": "gpt-4o-mini-tts",
+      "voice": "cedar",
+      "instructions": "Speak as a cheerful and friendly young Italian boy. Use clear American English, a warm natural tone, and a gentle pace for Korean third-grade English learners. Do not add or change any words.",
       "gender": "male",
       "child_mode": true,
       "rate": 0.85,
