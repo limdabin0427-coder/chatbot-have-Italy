@@ -313,6 +313,7 @@ def chatbot_config():
             "pitch": tts.get("pitch", 1.35),
         },
         "finaleMsg": CHARACTER.get("finale_message", "Come visit Italy next time!"),
+        "homeUrl": CHARACTER.get("home_url", ""),
     })
 
 
@@ -328,6 +329,7 @@ def start_chat():
     session["asked_items"] = []
     session["chat_history"] = []
     session["feeling_attempts"] = 0
+    session["retry_mode"] = False
 
     display_reply = f"Hi, {student_name}! {CHARACTER['intro_message']}"
     return respond(
@@ -416,7 +418,8 @@ def chat():
         asked_items = session.get("asked_items", [])
         object_name = extract_have_object(original)
         asked_key = item["key"] if item else f"free:{clean_text(object_name)}"
-        if asked_key in asked_items:
+        retry_mode = session.get("retry_mode", False)
+        if asked_key in asked_items and not retry_mode:
             return respond(
                 "You already asked me that. Please choose a different item.",
                 "다른 물품을 골라 질문해 보세요.",
@@ -427,6 +430,7 @@ def chat():
 
         asked_items.append(asked_key)
         session["asked_items"] = asked_items
+        session["retry_mode"] = False
         next_stage, popup, followup_reply = question_stages[stage]
         if item:
             answer = get_item_answer(CHARACTER, item["key"])
@@ -447,6 +451,18 @@ def chat():
         )
 
     return respond(ENDING_MESSAGE, None, Stage.END.value, fireworks=True, original=original)
+
+
+@app.route("/api/retry-question", methods=["POST"])
+def retry_question():
+    session["retry_mode"] = True
+    session.modified = True
+    return jsonify({
+        "reply": "Ask me one more question.",
+        "popup": "물품을 하나 골라 다시 질문해 보세요.",
+        "stage": Stage.STUDENT_QUESTION_3.value,
+        "reaction": "speaking",
+    })
 
 
 if __name__ == "__main__":
