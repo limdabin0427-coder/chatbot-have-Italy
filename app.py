@@ -1,11 +1,16 @@
 import json
+import hashlib
+import hmac
 import os
 import re
+import threading
+import time
 import traceback
+from collections import OrderedDict, defaultdict, deque
 from datetime import datetime
 
 import gspread
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, render_template, request, session
 from flask_cors import CORS
 from google.oauth2.service_account import Credentials
 from openai import OpenAI
@@ -47,6 +52,16 @@ ENDING_MESSAGE = CHARACTER["ending_message"]
 
 openai_key = os.environ.get(OPENAI_API_KEY_ENV)
 openai_client = OpenAI(api_key=openai_key) if openai_key else None
+
+tts_key = os.environ.get("OPENAI_TTS_API_KEY")
+tts_client = OpenAI(api_key=tts_key, timeout=5.0, max_retries=0) if tts_key else None
+TTS_MAX_CHARS = 500
+TTS_RATE_LIMIT = 30
+TTS_RATE_WINDOW_SECONDS = 60
+TTS_CACHE_MAX_ITEMS = 256
+tts_cache = OrderedDict()
+tts_requests = defaultdict(deque)
+tts_lock = threading.Lock()
 
 
 sheet = None
@@ -248,6 +263,34 @@ def save_log(corrected, original, reply, stage):
         traceback.print_exc()
 
 
+def make_tts_token(text):
+    message = str(text or "").strip().encode("utf-8")
+    # 배포 환경의 TTS 키를 서명 비밀값으로 사용하므로 브라우저에서 임의의
+    # 문장을 만들어 유료 TTS를 호출할 수 없다. 키 자체는 절대 전송하지 않는다.
+    secret = str(tts_key or app.secret_key).encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+def valid_tts_token(text, token):
+    expected = make_tts_token(text)
+    return bool(token) and hmac.compare_digest(expected, str(token))
+
+
+def tts_rate_limited(client_id):
+    now = time.monotonic()
+    key = re.sub(r"[^A-Za-z0-9_-]", "", str(client_id or ""))[:80]
+    if not key:
+        key = (request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown").split(",")[0]
+    with tts_lock:
+        recent = tts_requests[key]
+        while recent and now - recent[0] > TTS_RATE_WINDOW_SECONDS:
+            recent.popleft()
+        if len(recent) >= TTS_RATE_LIMIT:
+            return True
+        recent.append(now)
+    return False
+
+
 def respond(
     reply,
     popup,
@@ -273,12 +316,14 @@ def respond(
     return jsonify({
         "reply": reply,
         "speech_reply": speech_reply or reply,
+        "tts_token": make_tts_token(speech_reply or reply),
         "popup": popup,
         "stage": next_stage,
         "fireworks": fireworks,
         "recognized_text": corrected,
         "reaction": reaction,
         "followup_reply": followup_reply,
+        "followup_tts_token": make_tts_token(followup_reply) if followup_reply else None,
     })
 
 
@@ -307,6 +352,7 @@ def chatbot_config():
         "backgrounds": images.get("backgrounds", []),
         "flagImg": images.get("flag", ""),
         "tts": {
+            "provider": tts.get("provider", "openai"),
             "gender": tts.get("gender", CHARACTER.get("gender", "male")),
             "childMode": tts.get("child_mode", True),
             "rate": tts.get("rate", 0.85),
@@ -315,6 +361,59 @@ def chatbot_config():
         "finaleMsg": CHARACTER.get("finale_message", "Come visit Italy next time!"),
         "homeUrl": CHARACTER.get("home_url", ""),
     })
+
+
+@app.route("/api/tts", methods=["POST"])
+def synthesize_speech():
+    data = request.get_json(force=True, silent=True) or {}
+    text = str(data.get("text") or "").strip()
+    token = data.get("token")
+
+    if not text or len(text) > TTS_MAX_CHARS:
+        return jsonify({"error": "invalid_text"}), 400
+    if not valid_tts_token(text, token):
+        return jsonify({"error": "not_allowed"}), 403
+    if tts_rate_limited(data.get("client_id")):
+        return jsonify({"error": "rate_limited"}), 429
+    if tts_client is None:
+        return jsonify({"error": "tts_unavailable"}), 503
+
+    tts = CHARACTER.get("tts", {})
+    model = tts.get("model", "gpt-4o-mini-tts")
+    voice = tts.get("voice", "cedar")
+    instructions = tts.get(
+        "instructions",
+        "Speak clearly, warmly, and at a gentle pace for a young English learner.",
+    )
+    cache_key = hashlib.sha256(
+        f"{model}\0{voice}\0{instructions}\0{text}".encode("utf-8")
+    ).hexdigest()
+
+    with tts_lock:
+        cached = tts_cache.get(cache_key)
+        if cached is not None:
+            tts_cache.move_to_end(cache_key)
+    if cached is not None:
+        return Response(cached, mimetype="audio/mpeg", headers={"X-TTS-Cache": "HIT"})
+
+    try:
+        result = tts_client.audio.speech.create(
+            model=model,
+            voice=voice,
+            input=text,
+            instructions=instructions,
+            response_format="mp3",
+        )
+        audio_bytes = result.content
+        with tts_lock:
+            tts_cache[cache_key] = audio_bytes
+            tts_cache.move_to_end(cache_key)
+            while len(tts_cache) > TTS_CACHE_MAX_ITEMS:
+                tts_cache.popitem(last=False)
+        return Response(audio_bytes, mimetype="audio/mpeg", headers={"X-TTS-Cache": "MISS"})
+    except Exception as error:
+        print(f"⚠️ OpenAI TTS 실패, 브라우저 음성으로 전환: {type(error).__name__}: {error}")
+        return jsonify({"error": "tts_unavailable"}), 503
 
 
 @app.route("/api/start", methods=["POST"])
@@ -459,6 +558,7 @@ def retry_question():
     session.modified = True
     return jsonify({
         "reply": "Ask me one more question.",
+        "tts_token": make_tts_token("Ask me one more question."),
         "popup": "물품을 하나 골라 다시 질문해 보세요.",
         "stage": Stage.STUDENT_QUESTION_3.value,
         "reaction": "speaking",
