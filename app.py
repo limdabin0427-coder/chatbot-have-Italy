@@ -150,9 +150,29 @@ def safe_login_value(value, fallback=""):
 
 
 def is_greeting(message):
+    return normalize_greeting(message) is not None
+
+
+def normalize_greeting(message):
+    """Preserve a clear greeting while correcting common Korean-accent STT errors."""
     text = clean_text(message)
-    greetings = ["hello", "hi", "hey", "good morning", "안녕"]
-    return any(word in text for word in greetings)
+    if not text:
+        return None
+    if "good morning" in text or "굿모닝" in text or "굿 모닝" in text:
+        greeting = "Good morning"
+    elif re.search(r"(?:^|\s)(?:hi|high)(?:\s|$)", text) or "하이" in text:
+        greeting = "Hi"
+    elif re.search(r"(?:^|\s)hey(?:\s|$)", text) or "헤이" in text:
+        greeting = "Hey"
+    elif re.search(r"(?:^|\s)(?:hello|hallo|halo|yellow)(?:\s|$)", text) or "헬로" in text or "안녕" in text:
+        greeting = "Hello"
+    else:
+        normalized_name = clean_text(normalize_character_name(message))
+        weak_hello = re.search(r"(?:^|\s)(?:call|low)(?:\s|$)", text)
+        if not (weak_hello and clean_text(CHARACTER_NAME) in normalized_name):
+            return None
+        greeting = "Hello"
+    return f"{greeting}, {CHARACTER_NAME}."
 
 
 def normalize_character_name(message):
@@ -277,6 +297,16 @@ def valid_tts_token(text, token):
     return bool(token) and hmac.compare_digest(expected, str(token))
 
 
+def intro_speech_parts():
+    """Split the final sentence so the TTS cannot silently omit it."""
+    text = str(CHARACTER.get("intro_speech") or "").strip()
+    final_sentence = "I'm visiting your school today."
+    if text.endswith(final_sentence):
+        first_part = text[:-len(final_sentence)].strip()
+        return [part for part in (first_part, final_sentence) if part]
+    return [text] if text else []
+
+
 def tts_rate_limited(client_id):
     now = time.monotonic()
     key = re.sub(r"[^A-Za-z0-9_-]", "", str(client_id or ""))[:80]
@@ -380,6 +410,7 @@ def chatbot_config():
         # 고정된 첫 문장과 해당 문장 전용 서명을 함께 보낸다.
         "introTtsText": CHARACTER["intro_speech"],
         "introTtsToken": make_tts_token(CHARACTER["intro_speech"]),
+        "introTtsParts": [{"text": part, "token": make_tts_token(part)} for part in intro_speech_parts()],
     })
 
 
@@ -459,16 +490,15 @@ def transcribe_speech():
         "Never continue, complete, or invent speech during silence."
     )
     try:
-        result = tts_client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
+        result = tts_client.audio.translations.create(
+            model="whisper-1",
             file=(filename, audio_bytes, mime_type),
-            language="en",
             prompt=prompt,
             temperature=0,
             response_format="json",
         )
         transcript = str(getattr(result, "text", "") or "").strip()
-        if not transcript:
+        if not transcript or re.search(r"[가-힣]", transcript):
             return jsonify({"error": "empty_transcript"}), 422
         normalized = clean_text(transcript)
         words = re.findall(r"[a-zA-Z']+", transcript)
@@ -539,8 +569,12 @@ def chat():
     if not original:
         return respond("Please say that again.", "다시 한 번 말해 보세요.", stage, original=original)
 
+    if stage != Stage.WAIT_GREETING.value and re.search(r"[가-힣]", original):
+        return respond("Please say that again in English.", "영어로 다시 한 번 말해 보세요.", stage, original=original, corrected="")
+
     if stage == Stage.WAIT_GREETING.value:
-        if not is_greeting(original):
+        corrected_greeting = normalize_greeting(original)
+        if not corrected_greeting:
             return respond(
                 'Please say, "Hello!"',
                 f'{CHARACTER_NAME}에게 "Hello!"라고 인사해 보세요.',
@@ -552,7 +586,7 @@ def chat():
             "오늘의 기분을 영어로 말해 보세요.",
             Stage.WAIT_FEELING.value,
             original=original,
-            corrected=normalize_character_name(original),
+            corrected=corrected_greeting,
         )
 
     if stage == Stage.WAIT_FEELING.value:
