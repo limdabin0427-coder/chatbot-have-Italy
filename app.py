@@ -455,11 +455,8 @@ def transcribe_speech():
     mime_type = audio_file.mimetype or "audio/mp4"
     filename = audio_file.filename or ("speech.webm" if "webm" in mime_type else "speech.m4a")
     prompt = (
-        f"A Korean third-grade student is speaking short English sentences to {CHARACTER_NAME}. "
-        "Likely phrases include: Hello, Hi, I am happy, I am good, I am fine, I am tired, "
-        "I am sad, and Do you have a pencil, pen, book, eraser, ruler, ball, brush, cup, "
-        "bag, cap, tape, crayons, key cap, key ring, doll, tablet, phone, dog, cat, or bird? "
-        f"The character's name is spelled {CHARACTER_NAME}. Preserve the student's actual words."
+        f"Transcribe only clearly audible English spoken by one Korean child to {CHARACTER_NAME}. "
+        "Never continue, complete, or invent speech during silence."
     )
     try:
         result = tts_client.audio.transcriptions.create(
@@ -467,11 +464,37 @@ def transcribe_speech():
             file=(filename, audio_bytes, mime_type),
             language="en",
             prompt=prompt,
+            temperature=0,
             response_format="json",
         )
         transcript = str(getattr(result, "text", "") or "").strip()
         if not transcript:
             return jsonify({"error": "empty_transcript"}), 422
+        normalized = clean_text(transcript)
+        words = re.findall(r"[a-zA-Z']+", transcript)
+        prompt_markers = (
+            "likely phrases include",
+            "korean third grade student",
+            "preserve the student s actual words",
+            "transcribe only clearly audible english",
+            "never continue complete or invent speech",
+        )
+        feeling_examples = sum(
+            phrase in normalized
+            for phrase in ("i am happy", "i am good", "i am fine", "i am tired", "i am sad")
+        )
+        listed_items = sum(
+            re.search(rf"\b{re.escape(item)}\b", normalized) is not None
+            for item in ("pencil", "pen", "book", "eraser", "ruler", "ball", "brush", "cup", "bag", "cap", "card", "tape", "crayons", "doll", "tablet", "phone", "toy", "dog", "cat", "bird")
+        )
+        if (
+            len(words) > 14
+            or any(marker in normalized for marker in prompt_markers)
+            or feeling_examples >= 3
+            or listed_items >= 5
+        ):
+            print(f"⚠️ 비정상 STT 결과 차단: {transcript[:160]}")
+            return jsonify({"error": "unreliable_transcript"}), 422
         return jsonify({"text": transcript})
     except Exception as error:
         print(f"⚠️ OpenAI STT 실패: {type(error).__name__}: {error}")
