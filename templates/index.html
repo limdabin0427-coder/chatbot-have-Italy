@@ -24,6 +24,7 @@
         homeUrl    : "",
         introTtsText: "",
         introTtsToken: "",
+        introTtsParts: [],
     };
     </script>
 
@@ -501,6 +502,7 @@ async function loadChatbotConfig() {
         CONFIG.homeUrl = data.homeUrl || "";
         CONFIG.introTtsText = data.introTtsText || "";
         CONFIG.introTtsToken = data.introTtsToken || "";
+        CONFIG.introTtsParts = Array.isArray(data.introTtsParts) ? data.introTtsParts : [];
 
         applyConfig();
         // 학생이 번호와 이름을 입력하는 동안 첫 OpenAI 음성을 미리 내려받는다.
@@ -551,7 +553,10 @@ function prepareIntroTts() {
         return null;
     }
     if (!introTtsReadyPromise) {
-        introTtsReadyPromise = requestOpenAITts(CONFIG.introTtsText, CONFIG.introTtsToken)
+        const parts = CONFIG.introTtsParts.length
+            ? CONFIG.introTtsParts
+            : [{text: CONFIG.introTtsText, token: CONFIG.introTtsToken}];
+        introTtsReadyPromise = Promise.all(parts.map(part => requestOpenAITts(part.text, part.token)))
             .catch(error => {
                 // 실패한 요청을 고정하지 않아 시작 시 한 번 더 시도할 수 있게 한다.
                 introTtsReadyPromise = null;
@@ -670,6 +675,17 @@ function speak(text, cb, displayText=null, ttsToken=null) {
         ;
 }
 
+function speakSequence(parts, cb, displayText) {
+    const queue = parts.filter(part => part && part.text);
+    let index = 0;
+    const next = () => {
+        if (index >= queue.length) { if (cb) cb(); return; }
+        const part = queue[index++];
+        speak(part.text, next, displayText, part.token || null);
+    };
+    next();
+}
+
 /* ── GIF 전환 ── */
 function setGif(reaction) {
     if (reaction === 'yes')      charImg.src = CONFIG.gif.yes;
@@ -713,11 +729,14 @@ async function startApp() {
         if (data.stage) stage = data.stage;
         addMsg('luca', data.reply);
         conversationHistory.push({ role: 'assistant', content: data.reply });
-        speak(data.speech_reply || data.reply, () => {
+        const introParts = CONFIG.introTtsParts.length
+            ? CONFIG.introTtsParts
+            : [{text: data.speech_reply || data.reply, token: data.tts_token}];
+        speakSequence(introParts, () => {
             startConversationBackgrounds();
             hint.innerText = '🎙️ 버튼을 누르고 대답해보세요!';
             data.popup ? setTimeout(() => showPopup(data.popup), 200) : hidePopup();
-        }, data.reply, data.tts_token);
+        }, data.reply);
     } catch (error) {
         console.error('대화 시작 실패:', error);
         addMsg('luca', 'Sorry. Please try again.');
@@ -826,9 +845,11 @@ async function talk(input, alternatives=[]) {
             })
         });
         const data = await res.json();
-        const shownInput = data.recognized_text || input;
-        addMsg('user', shownInput);
-        conversationHistory.push({ role:'user', content:shownInput });
+        const shownInput = Object.prototype.hasOwnProperty.call(data, 'recognized_text') ? data.recognized_text : input;
+        if (shownInput) {
+            addMsg('user', shownInput);
+            conversationHistory.push({ role:'user', content:shownInput });
+        }
         const fullAssistantReply = [data.reply, data.followup_reply]
             .filter(Boolean)
             .join(' ');
