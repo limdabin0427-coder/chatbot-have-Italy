@@ -882,6 +882,9 @@ if (SR || (isAppleMobile && navigator.mediaDevices && window.MediaRecorder)) {
         recognitionCandidates = [];
         isSubmittingSpeech = false;
         mic.classList.remove('recording');
+        if (!isBotSpeaking && String(stage).toLowerCase() !== 'end' && mic.style.display !== 'none') {
+            mic.classList.add('active');
+        }
         hint.innerText = message;
     };
 
