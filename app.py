@@ -36,7 +36,10 @@ from item_utils import (
     extract_have_object,
     find_item,
     is_have_question,
+    is_safe_open_object_text,
     normalize_have_question,
+    recognition_candidates,
+    resolve_known_item,
 )
 
 
@@ -119,7 +122,10 @@ def select_recognition_candidate(primary, alternatives, stage):
 
     if stage == Stage.WAIT_FEELING.value:
         return next(
-            (text for text in candidates if feeling_category(text) != "unknown"),
+            (
+                text for text in candidates
+                if normalize_feeling(text) and not is_feeling_question(text)
+            ),
             candidates[0],
         )
 
@@ -200,15 +206,59 @@ def parse_yes_no(message):
     return None
 
 
-def feeling_category(message):
+FEELING_FORMS = (
+    ("not bad", "I'm not bad.", "neutral"),
+    ("so so", "I'm so-so.", "neutral"),
+    ("not good", "I'm not good.", "negative"),
+    ("unhappy", "I'm unhappy.", "negative"),
+    ("wonderful", "I'm wonderful.", "positive"),
+    ("fantastic", "I'm fantastic.", "positive"),
+    ("excited", "I'm excited.", "positive"),
+    ("awesome", "I'm awesome.", "positive"),
+    ("perfect", "I'm perfect.", "positive"),
+    ("nervous", "I'm nervous.", "negative"),
+    ("scared", "I'm scared.", "negative"),
+    ("sleepy", "I'm sleepy.", "negative"),
+    ("hungry", "I'm hungry.", "negative"),
+    ("bored", "I'm bored.", "negative"),
+    ("angry", "I'm angry.", "negative"),
+    ("tired", "I'm tired.", "negative"),
+    ("upset", "I'm upset.", "negative"),
+    ("sick", "I'm sick.", "negative"),
+    ("sad", "I'm sad.", "negative"),
+    ("happy", "I'm happy.", "positive"),
+    ("great", "I'm great.", "positive"),
+    ("good", "I'm good.", "positive"),
+    ("fine", "I'm fine.", "positive"),
+    ("okay", "I'm okay.", "neutral"),
+    ("ok", "I'm okay.", "neutral"),
+    ("cold", "I'm cold.", "negative"),
+    ("hot", "I'm hot.", "negative"),
+    ("bad", "I'm bad.", "negative"),
+)
+
+
+def is_feeling_question(message):
     text = clean_text(message)
-    if any(word in text for word in ["okay", "ok", "so so", "not bad"]):
-        return "neutral"
-    if any(word in text for word in ["not good", "unhappy", "tired", "sleepy", "sad", "sick", "angry", "bad"]):
-        return "negative"
-    if any(word in text for word in ["happy", "great", "good", "fine", "perfect", "awesome", "wonderful"]):
-        return "positive"
-    return "unknown"
+    return bool(re.search(r"\b(?:are you|how are you)\b", text))
+
+
+def normalize_feeling(message):
+    text = clean_text(message)
+    if not text or is_feeling_question(text):
+        return None
+    text = re.sub(r"\bi m find\b|\bi am find\b", "i am fine", text)
+    text = re.sub(r"\bi m tire\b|\bi am tire\b", "i am tired", text)
+    text = re.sub(r"\bi m exciting\b|\bi am exciting\b", "i am excited", text)
+    for phrase, display, category in FEELING_FORMS:
+        if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text):
+            return {"display": display, "category": category}
+    return None
+
+
+def feeling_category(message):
+    normalized = normalize_feeling(message)
+    return normalized["category"] if normalized else "unknown"
 
 def feeling_reply(message):
     category = feeling_category(message)
@@ -239,6 +289,55 @@ def call_gpt(system_prompt, user_message, fallback):
     except Exception as error:
         print(f"❌ OpenAI 호출 실패: {error}")
         return fallback
+
+
+def classify_open_item_candidates(primary, alternatives):
+    """Validate up to five open-vocabulary STT candidates in one small AI call."""
+    candidates = []
+    for source_text in recognition_candidates(primary, alternatives):
+        if not is_have_question(source_text):
+            continue
+        object_name = extract_have_object(source_text)
+        if is_safe_open_object_text(object_name):
+            candidates.append((source_text, object_name))
+    if not candidates or not openai_client:
+        return None
+    prompt = """
+You validate one object phrase from a Korean grade-3 English speaking activity.
+Accept only when it clearly names ONE common, child-safe, possessable concrete
+object, school item, toy, clothing item, or animal. Reject unclear ASR fragments,
+body parts, people, brands, abstract ideas, medical/sexual/violent/toilet words,
+or anything unsafe for an elementary classroom.
+Return JSON only:
+{"status":"accept" or "reject","candidate_index":0,"display_name":"a/an + singular noun, or a natural plural noun"}
+candidate_index must identify the clearest acceptable phrase from the supplied list.
+Do not guess or repair an unclear phrase.
+""".strip()
+    raw = call_gpt(
+        prompt,
+        json.dumps([name for _, name in candidates], ensure_ascii=False),
+        '{"status":"reject","candidate_index":0,"display_name":""}',
+    )
+    try:
+        result = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if result.get("status") != "accept":
+        return None
+    try:
+        selected_index = int(result.get("candidate_index", 0))
+        source_text = candidates[selected_index][0]
+    except (TypeError, ValueError, IndexError):
+        return None
+    display_name = str(result.get("display_name") or "").strip().strip(".?!\"'")
+    if not is_safe_open_object_text(display_name):
+        return None
+    cleaned_name = clean_text(display_name)
+    return {
+        "key": f"open:{cleaned_name}",
+        "display_name": display_name,
+        "source_text": source_text,
+    }
 
 
 def ai_feeling_reply(message):
@@ -590,21 +689,32 @@ def chat():
         )
 
     if stage == Stage.WAIT_FEELING.value:
-        category = feeling_category(original)
+        normalized_feeling = normalize_feeling(original)
         attempts = session.get("feeling_attempts", 0)
-        if category == "unknown" and attempts == 0:
+        if is_feeling_question(original) and attempts == 0:
+            session["feeling_attempts"] = 1
+            return respond(
+                'Please say, "I\'m happy."',
+                "오늘의 기분을 영어로 다시 말해 보세요.",
+                Stage.WAIT_FEELING.value,
+                original=original,
+                corrected="",
+            )
+        if not normalized_feeling and attempts == 0:
             session["feeling_attempts"] = 1
             return respond(
                 "How are you today?",
                 "오늘의 기분을 영어로 다시 말해 보세요.",
                 Stage.WAIT_FEELING.value,
                 original=original,
+                corrected="",
             )
         return respond(
             feeling_reply(original),
             "활동지의 물음을 보고 질문해 보세요.",
             Stage.STUDENT_QUESTION_1.value,
             original=original,
+            corrected=normalized_feeling["display"] if normalized_feeling else "",
         )
 
     question_stages = {
@@ -622,19 +732,45 @@ def chat():
     }
 
     if stage in question_stages:
-        item = find_item(original)
-        if not is_have_question(original):
+        item_resolution = resolve_known_item(data.get("message"), alternatives)
+        if item_resolution["status"] == "ambiguous":
             return respond(
-                "Great try! Can you say that again?",
-                '“Do you have ~?”로 다시 질문해 보세요.',
+                "Card or cat? Please say it again.",
+                "다시 단어를 또박또박 말해 보세요!",
                 stage,
                 original=original,
+                corrected="",
+            )
+        item = item_resolution.get("item")
+        if item:
+            original = item_resolution["source_text"]
+        if not is_have_question(original):
+            return respond(
+                'Try again! Please say, "Do you have a ___?"',
+                "물건 이름을 또박또박 말하며 다시 말해 보세요!",
+                stage,
+                original=original,
+                corrected="",
+                speech_reply='Try again! Please say, "Do you have...?"',
             )
 
-        corrected = normalize_have_question(original)
+        if not item:
+            item = classify_open_item_candidates(data.get("message"), alternatives)
+            if item:
+                original = item["source_text"]
+        if not item:
+            return respond(
+                'Try again! Please say, "Do you have a ___?"',
+                "물건 이름을 또박또박 말하며 다시 말해 보세요!",
+                stage,
+                original=original,
+                corrected="",
+                speech_reply='Try again! Please say, "Do you have...?"',
+            )
+
+        corrected = f"Do you have {item['display_name']}?"
         asked_items = session.get("asked_items", [])
-        object_name = extract_have_object(original)
-        asked_key = item["key"] if item else f"free:{clean_text(object_name)}"
+        asked_key = item["key"]
         retry_mode = session.get("retry_mode", False)
         if asked_key in asked_items and not retry_mode:
             return respond(
@@ -649,7 +785,7 @@ def chat():
         session["asked_items"] = asked_items
         session["retry_mode"] = False
         next_stage, popup, followup_reply = question_stages[stage]
-        if item:
+        if not item["key"].startswith("open:"):
             answer = get_item_answer(CHARACTER, item["key"])
             reply = make_item_response(answer, item["display_name"])
             reaction = answer
