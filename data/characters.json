@@ -14,6 +14,10 @@
     "ending_message": "Great job! Thank you for helping me. Come visit Italy next time! See you!",
     "finale_message": "Come visit Italy next time!\n다음에는 이탈리아에서 만나요!",
     "first_item": "pencil",
+    "retry_examples": {
+      "STUDENT_QUESTION_1": "Do you have a pencil?",
+      "STUDENT_QUESTION_2": "Do you have a cup?"
+    },
     "inventory": {
       "pencil": "no",
       "pen": "yes",
