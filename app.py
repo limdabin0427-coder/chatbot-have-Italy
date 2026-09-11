@@ -666,7 +666,7 @@ def question_retry_response(stage, original, ambiguous=False):
     if attempt == 1:
         return respond('Try again! Please say, "Do you have ___?"', "물건 이름을 또박또박 말하며 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Try again! Please say, "Do you have...?"')
     if attempt == 2:
-        return respond('Say it slowly. "Do you... have... ___?"', "천천히 또박또박 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Say it slowly. "Do you... have...?"')
+        return respond('Say it slowly. "Do you... have... ___?"', "천천히 또박또박 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Say it slowly. "Do you... have?"')
 
     retry_examples = CHARACTER.get("retry_examples", {})
     default_examples = {Stage.STUDENT_QUESTION_1.value: "Do you have a pencil?", Stage.STUDENT_QUESTION_2.value: "Do you have a cup?"}
