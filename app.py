@@ -642,6 +642,7 @@ def start_chat():
     session["chat_history"] = []
     session["feeling_attempts"] = 0
     session["retry_mode"] = False
+    session["question_retry_attempts"] = {}
 
     display_reply = f"Hi, {student_name}! {CHARACTER['intro_message']}"
     return respond(
@@ -650,6 +651,39 @@ def start_chat():
         popup=f"{CHARACTER_NAME}에게 영어로 인사해 보세요!",
         next_stage=Stage.WAIT_GREETING.value,
     )
+
+
+def question_retry_response(stage, original, ambiguous=False):
+    """Give progressively stronger help without advancing the dialogue stage."""
+    attempts = session.get("question_retry_attempts", {})
+    attempt = int(attempts.get(stage, 0)) + 1
+    attempts[stage] = attempt
+    session["question_retry_attempts"] = attempts
+    session.modified = True
+
+    if ambiguous and attempt < 3:
+        return respond("Card or cat? Please say it again.", "다시 단어를 또박또박 말해 보세요!", stage, original=original, corrected="")
+    if attempt == 1:
+        return respond('Try again! Please say, "Do you have ___?"', "물건 이름을 또박또박 말하며 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Try again! Please say, "Do you have...?"')
+    if attempt == 2:
+        return respond('Say it slowly. "Do you... have... ___?"', "천천히 또박또박 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Say it slowly. "Do you... have...?"')
+
+    retry_examples = CHARACTER.get("retry_examples", {})
+    default_examples = {Stage.STUDENT_QUESTION_1.value: "Do you have a pencil?", Stage.STUDENT_QUESTION_2.value: "Do you have a cup?"}
+    if stage in default_examples:
+        example = str(retry_examples.get(stage, "")).strip()
+        if not re.fullmatch(r"Do you have .+\?", example, flags=re.IGNORECASE):
+            example = default_examples[stage]
+        return respond(f'Let\'s try together. "{example}"', "화면의 문장을 천천히 따라 말해 보세요!", stage, original=original, corrected="", speech_reply=f"Let's try together. {example}")
+    return respond("Choose an easy item. Try again!", "내가 발음하기 쉬운 물건으로 시도해보세요!", stage, original=original, corrected="")
+
+
+def clear_question_retry_attempts(stage):
+    attempts = session.get("question_retry_attempts", {})
+    if stage in attempts:
+        attempts.pop(stage, None)
+        session["question_retry_attempts"] = attempts
+        session.modified = True
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -734,41 +768,22 @@ def chat():
     if stage in question_stages:
         item_resolution = resolve_known_item(data.get("message"), alternatives)
         if item_resolution["status"] == "ambiguous":
-            return respond(
-                "Card or cat? Please say it again.",
-                "다시 단어를 또박또박 말해 보세요!",
-                stage,
-                original=original,
-                corrected="",
-            )
+            return question_retry_response(stage, original, ambiguous=True)
         item = item_resolution.get("item")
         if item:
             original = item_resolution["source_text"]
         if not is_have_question(original):
-            return respond(
-                'Try again! Please say, "Do you have a ___?"',
-                "물건 이름을 또박또박 말하며 다시 말해 보세요!",
-                stage,
-                original=original,
-                corrected="",
-                speech_reply='Try again! Please say, "Do you have...?"',
-            )
+            return question_retry_response(stage, original)
 
         if not item:
             item = classify_open_item_candidates(data.get("message"), alternatives)
             if item:
                 original = item["source_text"]
         if not item:
-            return respond(
-                'Try again! Please say, "Do you have a ___?"',
-                "물건 이름을 또박또박 말하며 다시 말해 보세요!",
-                stage,
-                original=original,
-                corrected="",
-                speech_reply='Try again! Please say, "Do you have...?"',
-            )
+            return question_retry_response(stage, original)
 
         corrected = f"Do you have {item['display_name']}?"
+        clear_question_retry_attempts(stage)
         asked_items = session.get("asked_items", [])
         asked_key = item["key"]
         retry_mode = session.get("retry_mode", False)
@@ -809,6 +824,9 @@ def chat():
 @app.route("/api/retry-question", methods=["POST"])
 def retry_question():
     session["retry_mode"] = True
+    attempts = session.get("question_retry_attempts", {})
+    attempts.pop(Stage.STUDENT_QUESTION_3.value, None)
+    session["question_retry_attempts"] = attempts
     session.modified = True
     return jsonify({
         "reply": "Ask me one more question.",
