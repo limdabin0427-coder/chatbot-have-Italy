@@ -52,6 +52,7 @@ CHARACTER_NAME = CHARACTER["name"]
 COUNTRY = CHARACTER["country"]
 SHEET_TAB = CHARACTER.get("sheet_tab", CHATBOT_ID)
 ENDING_MESSAGE = CHARACTER["ending_message"]
+STUDENT_HAVE_RESPONSE = "STUDENT_HAVE_RESPONSE"
 
 openai_key = os.environ.get(OPENAI_API_KEY_ENV)
 openai_client = OpenAI(api_key=openai_key) if openai_key else None
@@ -128,6 +129,9 @@ def select_recognition_candidate(primary, alternatives, stage):
             ),
             candidates[0],
         )
+
+    if stage == STUDENT_HAVE_RESPONSE:
+        return next((text for text in candidates if parse_yes_no(text)), candidates[0])
 
     question_stage_values = {
         Stage.STUDENT_QUESTION_1.value,
@@ -758,9 +762,9 @@ def chat():
             "Ask me one more question.",
         ),
         Stage.STUDENT_QUESTION_2.value: (
-            Stage.STUDENT_QUESTION_3.value,
-            "물품을 하나 골라 마지막 질문을 해 보세요.",
-            "Great! Choose one more item and ask me.",
+            STUDENT_HAVE_RESPONSE,
+            '“Yes, I do.” 또는 “No, I don’t.”로 대답해 보세요.',
+            f"How about you? Do you have {CHARACTER.get('preference_item', 'a cup')}?",
         ),
         Stage.STUDENT_QUESTION_3.value: (Stage.END.value, None, ENDING_MESSAGE),
     }
@@ -817,6 +821,14 @@ def chat():
             reaction=reaction,
             followup_reply=followup_reply,
         )
+
+    if stage == STUDENT_HAVE_RESPONSE:
+        answer = parse_yes_no(original)
+        if answer is None:
+            return respond("Great try! Can you say that again?", '“Yes, I do.” 또는 “No, I don’t.”로 대답해 보세요.', stage, original=original)
+        reply = "Great!" if answer == "yes" else "Okay! That's fine."
+        corrected_answer = "Yes, I do." if answer == "yes" else "No, I don't."
+        return respond(reply, "물품을 하나 골라 마지막 질문을 해 보세요.", Stage.STUDENT_QUESTION_3.value, original=original, corrected=corrected_answer, reaction="yes", followup_reply="Good! Now, choose one more item and ask me.")
 
     return respond(ENDING_MESSAGE, None, Stage.END.value, fireworks=True, original=original)
 
