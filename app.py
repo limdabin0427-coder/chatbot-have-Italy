@@ -63,6 +63,7 @@ TTS_MAX_CHARS = 500
 TTS_RATE_LIMIT = 30
 TTS_RATE_WINDOW_SECONDS = 60
 TTS_CACHE_MAX_ITEMS = 256
+QUESTION_CONFIRMATION_ATTEMPT = 4
 tts_cache = OrderedDict()
 tts_requests = defaultdict(deque)
 stt_requests = defaultdict(deque)
@@ -535,6 +536,7 @@ def respond(
     speech_reply=None,
     reaction="speaking",
     followup_reply=None,
+    extra=None,
 ):
     corrected = corrected if corrected is not None else original
     full_reply = " ".join(
@@ -547,7 +549,7 @@ def respond(
     session["chat_history"] = history[-MAX_HISTORY_MESSAGES:]
     session.modified = True
     save_log(corrected, original, full_reply, next_stage)
-    return jsonify({
+    payload = {
         "reply": reply,
         "speech_reply": speech_reply or reply,
         "tts_token": make_tts_token(speech_reply or reply),
@@ -558,7 +560,10 @@ def respond(
         "reaction": reaction,
         "followup_reply": followup_reply,
         "followup_tts_token": make_tts_token(followup_reply) if followup_reply else None,
-    })
+    }
+    if extra:
+        payload.update(extra)
+    return jsonify(payload)
 
 
 def no_speech_response(next_stage):
@@ -769,7 +774,63 @@ def question_retry_response(stage, original, ambiguous=False):
         return respond('Say it slowly. "Do you... have... ___?"', "천천히 또박또박 다시 말해 보세요!", stage, original=original, corrected="", speech_reply='Say it slowly. "Do you... have?"')
 
     retry_examples = CHARACTER.get("retry_examples", {})
-    default_examples = {Stage.STUDENT_QUESTION_1.value: "Do you have a pencil?", Stage.STUDENT_QUESTION_2.value: "Do you have a cup?"}
+    default_examples = {
+        Stage.STUDENT_QUESTION_1.value: "Do you have a pencil?",
+        Stage.STUDENT_QUESTION_2.value: "Do you have a cup?",
+        Stage.STUDENT_QUESTION_3.value: "Do you have a book?",
+    }
+
+    if attempt >= QUESTION_CONFIRMATION_ATTEMPT:
+        candidate_questions = []
+        if stage == Stage.STUDENT_QUESTION_3.value:
+            recognized_item = find_item(original)
+            if recognized_item:
+                candidate_questions.append(
+                    f"Do you have {recognized_item['display_name']}?"
+                )
+
+        configured_example = str(retry_examples.get(stage, "")).strip()
+        if configured_example:
+            candidate_questions.append(configured_example)
+        candidate_questions.append(default_examples.get(stage, "Do you have a book?"))
+
+        fallback_items = {
+            Stage.STUDENT_QUESTION_1.value: ["a pencil", "a pen", "a book", "a ball"],
+            Stage.STUDENT_QUESTION_2.value: ["a cup", "a book", "a pen", "a ball"],
+            Stage.STUDENT_QUESTION_3.value: ["a book", "a pen", "a ball", "a bag"],
+        }
+        candidate_questions.extend(
+            f"Do you have {item_name}?"
+            for item_name in fallback_items.get(stage, ["a book"])
+        )
+
+        asked_items = set(session.get("asked_items", []))
+        suggested_question = "Do you have a book?"
+        for candidate_question in candidate_questions:
+            item = find_item(candidate_question)
+            if item and item["key"] not in asked_items:
+                suggested_question = f"Do you have {item['display_name']}?"
+                break
+
+        session["pending_question_confirmation"] = {
+            "stage": stage,
+            "question": suggested_question,
+        }
+        session.modified = True
+        confirmation_reply = f'Do you want to say, "{suggested_question}"'
+        return respond(
+            confirmation_reply,
+            f'"{suggested_question}"라고 말하고 싶으신가요?',
+            stage,
+            original=original,
+            corrected="",
+            speech_reply=confirmation_reply,
+            extra={
+                "confirmation_required": True,
+                "suggested_question": suggested_question,
+            },
+        )
+
     if stage in default_examples:
         example = str(retry_examples.get(stage, "")).strip()
         if not re.fullmatch(r"Do you have .+\?", example, flags=re.IGNORECASE):
@@ -790,11 +851,32 @@ def clear_question_retry_attempts(stage):
 def chat():
     data = request.get_json(force=True, silent=True) or {}
     stage = normalize_stage((data.get("stage") or "").strip())
-    alternatives = data.get("alternatives")
+    support_confirmation = bool(data.get("support_confirmation"))
+    pending_confirmation = session.get("pending_question_confirmation")
+
+    if support_confirmation:
+        if (
+            not isinstance(pending_confirmation, dict)
+            or pending_confirmation.get("stage") != stage
+            or not pending_confirmation.get("question")
+        ):
+            return jsonify({"error": "confirmation_not_available"}), 409
+        message = str(pending_confirmation["question"])
+        alternatives = []
+        support_log_original = f"[선택 지원 사용] {message}"
+        session.pop("pending_question_confirmation", None)
+        session.modified = True
+    else:
+        message = data.get("message")
+        alternatives = data.get("alternatives")
+        support_log_original = None
+        session.pop("pending_question_confirmation", None)
+        session.modified = True
+
     if not isinstance(alternatives, list):
         alternatives = []
     original = select_recognition_candidate(
-        data.get("message"),
+        message,
         alternatives[:5],
         stage,
     )
@@ -866,7 +948,7 @@ def chat():
     }
 
     if stage in question_stages:
-        item_resolution = resolve_known_item(data.get("message"), alternatives)
+        item_resolution = resolve_known_item(message, alternatives)
         if item_resolution["status"] == "ambiguous":
             return question_retry_response(stage, original, ambiguous=True)
         item = item_resolution.get("item")
@@ -876,7 +958,7 @@ def chat():
             return question_retry_response(stage, original)
 
         if not item:
-            item = classify_open_item_candidates(data.get("message"), alternatives)
+            item = classify_open_item_candidates(message, alternatives)
             if item:
                 original = item["source_text"]
         if not item:
@@ -912,7 +994,7 @@ def chat():
             popup,
             next_stage,
             fireworks=next_stage == Stage.END.value,
-            original=original,
+            original=support_log_original or original,
             corrected=corrected,
             reaction=reaction,
             followup_reply=followup_reply,
